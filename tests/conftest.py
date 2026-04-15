@@ -70,6 +70,12 @@ _mapping_job_mock = MagicMock()
 _mapping_job_mock.MappingJob = MagicMock
 sys.modules.setdefault("backend.app.models.mapping_job", _mapping_job_mock)
 
+_ontology_index_mock = MagicMock()
+_ontology_index_mock.OntologyClassIndex = MagicMock()
+_ontology_index_mock.OntologyPropertyIndex = MagicMock()
+_ontology_index_mock.OntologyIndexMeta = MagicMock()
+sys.modules.setdefault("backend.app.models.ontology_index", _ontology_index_mock)
+
 # Pipeline state
 sys.modules.setdefault("backend.app.services.pipeline_state", MagicMock())
 
