@@ -1,4 +1,5 @@
 from sqlalchemy import Column, BigInteger, String, Text, Integer, Boolean, DateTime, Index
+from sqlalchemy.dialects.postgresql import TSVECTOR
 from sqlalchemy.sql import func
 from backend.app.database import Base
 
@@ -15,7 +16,7 @@ class OntologyClassIndex(Base):
     comment_en = Column(Text, nullable=True)
     parent_uri = Column(String(512), nullable=True)
     namespace = Column(String(256), nullable=True)
-    search_vector = Column(Text, nullable=True)  # TSVECTOR
+    search_vector = Column(TSVECTOR, nullable=True)  # Full-text search vector
     created_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
     is_deleted = Column(Boolean, nullable=False, default=False)
     

@@ -8,7 +8,7 @@ from loguru import logger
 from rdflib import Graph, Namespace, RDF, RDFS, OWL
 from rdflib.namespace import XSD
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, insert, text
+from sqlalchemy import select, insert, text, func
 
 from backend.app.services.pipeline_state import PipelineState
 from backend.app.models.ontology_index import OntologyClassIndex, OntologyPropertyIndex, OntologyIndexMeta
@@ -204,7 +204,7 @@ async def insert_class(db: AsyncSession, class_info: Dict[str, Any]):
         logger.debug(f"Class already exists: {class_info['class_uri']}")
         return
     
-    # Build search vector
+    # Build search vector using PostgreSQL to_tsvector cast
     search_text = ' '.join(filter(None, [
         class_info.get('label_zh'),
         class_info.get('label_en'),
@@ -221,7 +221,7 @@ async def insert_class(db: AsyncSession, class_info: Dict[str, Any]):
         comment_en=class_info.get('comment_en'),
         parent_uri=class_info.get('parent_uri'),
         namespace=class_info.get('namespace'),
-        search_vector=search_text,
+        search_vector=func.to_tsvector('simple', search_text),
     )
     db.add(class_index)
 
