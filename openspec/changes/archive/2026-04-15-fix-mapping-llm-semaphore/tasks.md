@@ -38,6 +38,6 @@
 
 ## 5. 归档
 
-- [ ] 5.1 运行完整测试套件确认无回归
-- [ ] 5.2 归档变更：`/opsx:archive fix-mapping-llm-semaphore`
+- [x] 5.1 运行完整测试套件确认无回归
+- [x] 5.2 归档变更：`/opsx:archive fix-mapping-llm-semaphore`
 - [ ] 5.3 推送到远程仓库：`git push`
