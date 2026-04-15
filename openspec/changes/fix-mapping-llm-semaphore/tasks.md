@@ -22,11 +22,11 @@
 
 ## 3. REFACTOR — 重构优化
 
-- [ ] 3.1 提取魔法数字 `200`（DDL 截断长度）为常量 `DDL_KEYWORD_PREVIEW_LEN = 200`
-- [ ] 3.2 提取魔法数字 `100`（comment 截断长度）为常量 `DDL_COMMENT_PREVIEW_LEN = 100`
-- [ ] 3.3 将 `save_mapping_result` 的参数过长调用重构为关键字参数传递
-- [ ] 3.4 运行测试，确认重构后仍全部通过
-- [ ] 3.5 提交：`git commit -m "refactor: extract magic numbers and improve readability in mapping_llm"`
+- [x] 3.1 提取魔法数字 `200`（DDL 截断长度）为常量 `DDL_KEYWORD_PREVIEW_LEN = 200`
+- [x] 3.2 提取魔法数字 `100`（comment 截断长度）为常量 `DDL_COMMENT_PREVIEW_LEN = 100`
+- [x] 3.3 将 `save_mapping_result` 的参数过长调用重构为关键字参数传递
+- [x] 3.4 运行测试，确认重构后仍全部通过
+- [x] 3.5 提交：`git commit -m "refactor: extract magic numbers and improve readability in mapping_llm"`
 
 ## 4. REVIEW — LLM 代码评审
 

@@ -25,6 +25,9 @@ from backend.app.database import async_session_factory
 # Semaphore for concurrency control
 mapping_semaphore = asyncio.Semaphore(settings.MAX_CONCURRENCY)
 
+# Constants: DDL preview lengths used in keyword building and prompt construction
+DDL_KEYWORD_PREVIEW_LEN = 200   # chars of raw_ddl used for vector search keywords
+DDL_COMMENT_PREVIEW_LEN = 100   # chars of raw_ddl used as table comment in prompt
 
 async def mapping_llm_node(state: PipelineState) -> PipelineState:
     """Call LLM to map current table to FIBO class.
@@ -84,7 +87,7 @@ async def process_single_table(job_id: int, table_registry_id: int) -> Dict[str,
             return {"error": "Table not found"}
 
         # Search for candidate classes
-        keywords = f"{table_registry.table_name} {table_registry.raw_ddl[:200]}"
+        keywords = f"{table_registry.table_name} {table_registry.raw_ddl[:DDL_KEYWORD_PREVIEW_LEN]}"
         candidates = await search_candidates(keywords, limit=settings.CANDIDATE_LIMIT)
 
         if not candidates:
@@ -96,7 +99,7 @@ async def process_single_table(job_id: int, table_registry_id: int) -> Dict[str,
         prompt = build_mapping_prompt(
             database_name=table_registry.database_name,
             table_name=table_registry.table_name,
-            table_comment=table_registry.raw_ddl[:100],
+            table_comment=table_registry.raw_ddl[:DDL_COMMENT_PREVIEW_LEN],
             fields=table_registry.parsed_fields,
             candidate_classes=candidates
         )
