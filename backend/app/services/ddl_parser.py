@@ -179,8 +179,9 @@ def parse_create_table_sqlglot(statement: exp.Create, database_name: str, raw_co
                     
             elif isinstance(expr, exp.PrimaryKey):
                 # Extract primary key columns
+                # sqlglot may yield exp.Column or exp.Identifier depending on dialect
                 for col in expr.expressions:
-                    if isinstance(col, exp.Column):
+                    if isinstance(col, (exp.Column, exp.Identifier)):
                         primary_keys.append(col.name)
         
         # Update primary key flags
