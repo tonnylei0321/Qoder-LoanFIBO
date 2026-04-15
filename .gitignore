@@ -47,7 +47,7 @@ env/
 *.log
 logs/
 
-# Qoder (仅保留 skills 目录，其他忽略)
+# Qoder (保留 skills 和 commands 目录)
 .qoder/cache/
 .qoder/repowiki/
 .qoder/settings.json

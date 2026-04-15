@@ -5,13 +5,80 @@ description: >-
   当用户要求评审代码、审查 PR、检查代码变更、review code 时自动激活。
   适用场景：代码提交前评审、Pull Request 评审、代码重构后检查。
   基于项目技术栈（FastAPI、LangGraph、SQLAlchemy）自动调整评审重点。
+  必须检查 TDD 规范遵循情况。
 ---
 
 # Code Reviewer - 代码评审规范
 
 ## 评审原则
 
-每次评审代码时，**必须检查以下 5 个维度**，发现问题按 P0-P3 分级：
+每次评审代码时，**必须检查以下 6 个维度**，发现问题按 P0-P3 分级：
+
+---
+
+## 0. TDD 规范遵循（Test-Driven Development）
+
+### 检查项
+
+- [ ] 是否遵循 Red-Green-Refactor 流程
+- [ ] 测试是否在实现之前编写
+- [ ] 测试是否覆盖主要路径和边界条件
+- [ ] 测试命名是否描述行为（而非实现）
+- [ ] 是否遵循 AAA 模式（Arrange-Act-Assert）
+
+### TDD 流程要求
+
+```
+1. RED（编写失败的测试）
+   - 测试必须失败（功能未实现或实现不完整）
+   - 提交：git commit -m "test: add failing test for {feature}"
+   
+2. GREEN（实现代码）
+   - 只实现让测试通过的代码
+   - 不过度设计
+   - 提交：git commit -m "feat: implement {feature} to pass tests"
+   
+3. REFACTOR（重构）
+   - 重构代码提升质量
+   - 测试必须保持通过
+   - 提交：git commit -m "refactor: improve {feature}"
+   
+4. REVIEW（LLM 评审）
+   - 触发本 Skill 进行代码评审
+   - 根据评审意见修改
+   - 提交：git commit -m "review: address feedback"
+```
+
+### P1/P2 问题示例
+
+```python
+# ❌ P1 - 先实现代码，后补测试（违反 TDD）
+# backend/app/services/ddl_parser.py
+def parse_create_table(ddl: str) -> Dict:
+    # ... 已实现的代码 ...
+
+# tests/unit/test_ddl_parser.py
+# TODO: 添加测试（测试缺失）
+
+# ✅ 正确：测试先行
+# tests/unit/test_ddl_parser.py（先编写）
+@pytest.mark.asyncio
+async def test_parse_create_table_valid_ddl():
+    """
+    Given: 标准 CREATE TABLE DDL
+    When: 调用 parse_ddl 函数
+    Then: 正确提取表名和字段列表
+    """
+    ddl = "CREATE TABLE users (id INT, name VARCHAR)"
+    result = await parse_ddl(ddl)
+    assert result.table_name == "users"
+    assert len(result.fields) == 2
+
+# backend/app/services/ddl_parser.py（后实现）
+def parse_create_table(ddl: str) -> Dict:
+    # 实现代码
+    pass
+```
 
 ---
 
@@ -39,22 +106,6 @@ async def get_user(user_id: str):
     return await db.execute(query, {"user_id": user_id})
 ```
 
-```python
-# ❌ P0 - 未处理异常
-async def call_llm(prompt: str):
-    response = await llm.invoke(prompt)
-    return response.content  # 如果 LLM 调用失败，会抛出未捕获异常
-
-# ✅ 修复：添加异常处理
-async def call_llm(prompt: str):
-    try:
-        response = await llm.invoke(prompt)
-        return response.content
-    except LLMError as e:
-        logger.error(f"LLM call failed: {e}")
-        raise
-```
-
 ---
 
 ## 2. 安全性（Security）
@@ -67,7 +118,7 @@ async def call_llm(prompt: str):
 - [ ] 文件操作安全（路径遍历、任意文件读取）
 - [ ] 依赖安全（无已知漏洞的包版本）
 
-### P0/P1 问题示例
+### P0 问题示例
 
 ```python
 # ❌ P0 - 硬编码 API Key
@@ -76,31 +127,6 @@ DASHSCOPE_API_KEY = "sk-5c9ce8c702db4f6094805bceb5a21ad0"
 # ✅ 修复：使用环境变量
 from backend.app.config import settings
 DASHSCOPE_API_KEY = settings.DASHSCOPE_API_KEY
-```
-
-```python
-# ❌ P1 - 无输入验证
-async def upload_file(file: UploadFile):
-    content = await file.read()
-    await save_to_disk(f"/data/uploads/{file.filename}")  # 路径遍历漏洞
-
-# ✅ 修复：验证并清理文件名
-import os
-from pathlib import Path
-
-async def upload_file(file: UploadFile):
-    # 验证文件类型
-    allowed_extensions = {".pdf", ".docx", ".xlsx"}
-    ext = Path(file.filename).suffix.lower()
-    if ext not in allowed_extensions:
-        raise HTTPException(400, f"Unsupported file type: {ext}")
-    
-    # 安全路径
-    safe_filename = os.path.basename(file.filename)
-    upload_path = Path(settings.UPLOAD_DIR) / safe_filename
-    
-    content = await file.read()
-    await save_to_disk(upload_path)
 ```
 
 ---
@@ -134,22 +160,6 @@ async def get_all_users_with_mappings():
     return await db.execute(query)
 ```
 
-```python
-# ❌ P1 - 串行处理可并发任务
-async def process_tables(tables: list):
-    results = []
-    for table in tables:
-        result = await process_single_table(table)  # 串行处理
-        results.append(result)
-    return results
-
-# ✅ 修复：并发处理
-async def process_tables(tables: list):
-    tasks = [process_single_table(table) for table in tables]
-    results = await asyncio.gather(*tasks, return_exceptions=True)
-    return results
-```
-
 ---
 
 ## 4. 可维护性（Maintainability）
@@ -163,42 +173,6 @@ async def process_tables(tables: list):
 - [ ] 是否有必要的文档字符串（docstring）
 - [ ] 魔法数字是否提取为常量
 
-### P2/P3 问题示例
-
-```python
-# ❌ P2 - 函数过长（80行）
-async def process_mapping_job(job_id: int):
-    # ... 80 行代码 ...
-
-# ✅ 修复：拆分为多个函数
-async def process_mapping_job(job_id: int):
-    job = await fetch_job(job_id)
-    tables = await fetch_tables(job)
-    results = await process_tables(tables)
-    await generate_report(job, results)
-    return results
-```
-
-```python
-# ❌ P2 - 缺少类型注解
-def process_data(data):
-    result = []
-    for item in data:
-        if item.get("status") == "active":
-            result.append(transform(item))
-    return result
-
-# ✅ 修复：添加类型注解
-from typing import List, Dict, Any
-
-def process_data(data: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-    result = []
-    for item in data:
-        if item.get("status") == "active":
-            result.append(transform(item))
-    return result
-```
-
 ---
 
 ## 5. 测试覆盖（Test Coverage）
@@ -211,30 +185,17 @@ def process_data(data: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
 - [ ] 测试是否使用合理的断言
 - [ ] Mock 是否合理（不 mock 不该 mock 的对象）
 
-### P2 问题示例
+---
 
-```python
-# ❌ P2 - 新功能无测试
-async def test_calculate_confidence():
-    pass  # TODO: 实现测试
+## 6. LLM 调用规范
 
-# ✅ 修复：添加完整测试
-@pytest.mark.asyncio
-async def test_calculate_confidence_full_data():
-    result = await calculate_confidence({
-        "all_fields_present": True,
-        "format_valid": True
-    })
-    assert result == 0.95
+### 检查项
 
-@pytest.mark.asyncio
-async def test_calculate_confidence_missing_field():
-    result = await calculate_confidence({
-        "all_fields_present": False,
-        "format_valid": True
-    })
-    assert 0.5 <= result <= 0.6
-```
+- [ ] 是否遵循 llm-caller Skill 的 9 条原则
+- [ ] 是否有降级策略（fallback）
+- [ ] 是否处理了 JSON 解析错误
+- [ ] 是否检查了 uncertainty_exit
+- [ ] 置信度阈值是否写成配置项
 
 ---
 
@@ -243,7 +204,7 @@ async def test_calculate_confidence_missing_field():
 | 严重度 | 定义 | 处理要求 |
 |--------|------|----------|
 | **P0（致命）** | 安全漏洞、数据丢失风险、系统崩溃 | **必须修复，禁止合并** |
-| **P1（严重）** | 明显 bug、严重性能问题、核心功能缺陷 | **必须修复** |
+| **P1（严重）** | 明显 bug、严重性能问题、违反 TDD | **必须修复** |
 | **P2（中等）** | 代码质量问题、可维护性差、缺少测试 | **建议修复** |
 | **P3（轻微）** | 风格问题、命名不规范、缺少注释 | **可选修复** |
 
@@ -261,7 +222,7 @@ async def test_calculate_confidence_missing_field():
     "issues": [
       {
         "severity": "P0/P1/P2/P3",
-        "category": "correctness/security/performance/maintainability/testing",
+        "category": "tdd/correctness/security/performance/maintainability/testing/llm_call",
         "location": "文件路径:行号",
         "code_snippet": "问题代码片段",
         "description": "问题描述",
@@ -320,66 +281,9 @@ async def test_calculate_confidence_missing_field():
 
 ---
 
-## 评审示例
-
-### 示例 1
-
-**输入代码：**
-```python
-async def get_mapping_stats(job_id: int):
-    query = f"SELECT * FROM table_mapping WHERE job_id = {job_id}"
-    result = await db.execute(query)
-    return result.all()
-```
-
-**评审输出：**
-```json
-{
-  "review_result": {
-    "approved": false,
-    "summary": "存在 SQL 注入安全漏洞，必须修复",
-    "issues": [
-      {
-        "severity": "P0",
-        "category": "security",
-        "location": "line 2",
-        "code_snippet": "query = f\"SELECT * FROM table_mapping WHERE job_id = {job_id}\"",
-        "description": "使用字符串拼接构建 SQL 查询，存在 SQL 注入风险",
-        "suggestion": "使用 SQLAlchemy 参数化查询：\n\nquery = select(TableMapping).where(TableMapping.job_id == job_id)\nresult = await db.execute(query)"
-      }
-    ],
-    "strengths": [],
-    "suggestions": [
-      "建议添加缓存，避免重复查询"
-    ]
-  },
-  "confidence": 0.98
-}
-```
-
----
-
-## 评审流程
-
-```
-1. 理解变更意图
-   ↓
-2. 逐文件审查
-   ↓
-3. 标记问题（P0-P3）
-   ↓
-4. 汇总评审结果
-   ↓
-5. 生成评审报告
-   ↓
-6. 如果存在 P0/P1 → approved: false
-   否则 → approved: true
-```
-
----
-
 ## 参考资源
 
 - LLM 调用规范：[llm-caller Skill](../llm-caller/SKILL.md)
 - Python 编码规范：PEP8
 - 项目技术栈：FastAPI + LangGraph + SQLAlchemy Async
+- TDD 规范：见本文件"0. TDD 规范遵循"章节
