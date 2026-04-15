@@ -54,20 +54,20 @@ _db_mock.async_session_factory = MagicMock()
 sys.modules.setdefault("backend.app.database", _db_mock)
 
 _table_mapping_mock = MagicMock()
-_table_mapping_mock.TableMapping = MagicMock
-_table_mapping_mock.FieldMapping = MagicMock
+_table_mapping_mock.TableMapping = MagicMock()
+_table_mapping_mock.FieldMapping = MagicMock()
 sys.modules.setdefault("backend.app.models.table_mapping", _table_mapping_mock)
 
 _table_registry_mock = MagicMock()
-_table_registry_mock.TableRegistry = MagicMock
+_table_registry_mock.TableRegistry = MagicMock()
 sys.modules.setdefault("backend.app.models.table_registry", _table_registry_mock)
 
 _llm_call_log_mock = MagicMock()
-_llm_call_log_mock.LLMCallLog = MagicMock
+_llm_call_log_mock.LLMCallLog = MagicMock()
 sys.modules.setdefault("backend.app.models.llm_call_log", _llm_call_log_mock)
 
 _mapping_job_mock = MagicMock()
-_mapping_job_mock.MappingJob = MagicMock
+_mapping_job_mock.MappingJob = MagicMock()
 sys.modules.setdefault("backend.app.models.mapping_job", _mapping_job_mock)
 
 _ontology_index_mock = MagicMock()
@@ -90,3 +90,13 @@ _prompt_mock.MAPPING_SYSTEM_PROMPT = "You are a FIBO mapping expert."
 _prompt_mock.build_mapping_prompt = MagicMock(return_value="mapped prompt")
 _prompt_mock.MAPPING_OUTPUT_SCHEMA = {}
 sys.modules.setdefault("backend.app.prompts.mapping_prompt", _prompt_mock)
+
+_critic_prompt_mock = MagicMock()
+_critic_prompt_mock.CRITIC_SYSTEM_PROMPT = "You are a FIBO critic expert."
+_critic_prompt_mock.build_critic_prompt = MagicMock(return_value="critic prompt")
+_critic_prompt_mock.CRITIC_OUTPUT_SCHEMA = {}
+sys.modules.setdefault("backend.app.prompts.critic_prompt", _critic_prompt_mock)
+
+_mapping_review_mock = MagicMock()
+_mapping_review_mock.MappingReview = MagicMock()
+sys.modules.setdefault("backend.app.models.mapping_review", _mapping_review_mock)
