@@ -47,8 +47,11 @@ env/
 *.log
 logs/
 
-# Qoder
-.qoder/
+# Qoder (仅保留 skills 目录，其他忽略)
+.qoder/cache/
+.qoder/repowiki/
+.qoder/settings.json
+.qoder/workflows/
 
 # Docker volumes (if mounted locally)
 postgres_data/
