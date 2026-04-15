@@ -21,6 +21,10 @@ CREATE_TABLE_PATTERN = re.compile(
     re.IGNORECASE | re.DOTALL
 )
 
+# Pattern to detect per-table database annotation in multi-db DDL files
+# Matches: -- 数据库: <dbname>  (on its own line, immediately before CREATE TABLE)
+DB_ANNOTATION_PATTERN = re.compile(r'^--\s*数据库:\s*(\S+)\s*$', re.MULTILINE)
+
 COMMENT_PATTERN = re.compile(r"COMMENT\s*['\"](.+?)['\"]", re.IGNORECASE)
 COLUMN_COMMENT_PATTERN = re.compile(
     r'`?(\w+)`?\s+([\w\(\)]+)\s*(?:NOT\s+NULL|DEFAULT\s+[^,]+)?\s*COMMENT\s*["\']([^"\']+)["\']',
@@ -55,15 +59,17 @@ async def parse_ddl_node(state: PipelineState) -> PipelineState:
         for ddl_file in ddl_dir.glob("*.sql"):
             logger.info(f"Processing DDL file: {ddl_file.name}")
             
-            # Extract database name from filename
-            database_name = ddl_file.stem
+            # Fallback database name from filename (used when no inline annotation)
+            filename_db = ddl_file.stem
             
             try:
                 with open(ddl_file, 'r', encoding='utf-8') as f:
                     content = f.read()
                 
-                # Parse all CREATE TABLE statements
-                tables = parse_ddl_content(content, database_name)
+                # Parse all CREATE TABLE statements.
+                # split_ddl_by_database handles multi-db files (-- 数据库: xxx annotations)
+                # and single-db files (falls back to filename as database name).
+                tables = split_and_parse_ddl(content, filename_db)
                 
                 for table_info in tables:
                     total_tables += 1
@@ -118,6 +124,84 @@ async def update_job_stats(job_id: int, total_tables: int):
         if job:
             job.total_tables = total_tables
             await db.commit()
+
+
+def split_and_parse_ddl(content: str, fallback_db: str) -> List[Dict[str, Any]]:
+    """Parse DDL content, supporting both single-db and multi-db files.
+
+    Multi-db files contain per-table annotations of the form::
+
+        -- 表: <table_name>
+        -- 数据库: <db_name>
+        CREATE TABLE ...
+
+    For each CREATE TABLE block the database name is resolved from the closest
+    preceding ``-- 数据库:`` annotation.  If no annotation is found the
+    ``fallback_db`` (usually the filename stem) is used instead.
+    """
+    # Fast-path: check whether the file contains any inline DB annotations.
+    # If not, just delegate to the existing parse_ddl_content.
+    if not DB_ANNOTATION_PATTERN.search(content):
+        return parse_ddl_content(content, fallback_db)
+
+    # Split on CREATE TABLE boundaries, preserving the preceding comment block
+    # so we can extract the -- 数据库: annotation for each table.
+    # Strategy: scan line-by-line, accumulate comment lines, flush on CREATE TABLE.
+    tables: List[Dict[str, Any]] = []
+    current_db = fallback_db
+    pending_lines: List[str] = []
+
+    # We'll collect each (db_name, block_text) tuple then parse them.
+    blocks: List[tuple] = []   # (database_name, raw_block_text)
+
+    lines = content.splitlines(keepends=True)
+    i = 0
+    while i < len(lines):
+        line = lines[i]
+        stripped = line.strip()
+
+        # Track the most-recently-seen -- 数据库: annotation
+        m = re.match(r'^--\s*数据库:\s*(\S+)', stripped)
+        if m:
+            current_db = m.group(1)
+            pending_lines.append(line)
+            i += 1
+            continue
+
+        if re.match(r'CREATE\s+TABLE', stripped, re.IGNORECASE):
+            # Collect the full CREATE TABLE block (until the closing parenthesis line)
+            block_lines = list(pending_lines)
+            block_lines.append(line)
+            i += 1
+            depth = line.count('(') - line.count(')')
+            while i < len(lines) and depth > 0:
+                block_lines.append(lines[i])
+                depth += lines[i].count('(') - lines[i].count(')')
+                i += 1
+            # Grab any trailing ENGINE/COMMENT options on the same logical statement
+            while i < len(lines):
+                peek = lines[i].strip()
+                if peek.startswith('--') or peek == '' or re.match(r'CREATE\s+TABLE', peek, re.IGNORECASE):
+                    break
+                block_lines.append(lines[i])
+                i += 1
+
+            block_text = ''.join(block_lines)
+            blocks.append((current_db, block_text))
+            pending_lines = []
+            continue
+
+        pending_lines.append(line)
+        i += 1
+
+    # Parse each block individually using the per-table database name
+    for db_name, block_text in blocks:
+        parsed = parse_ddl_content(block_text, db_name)
+        tables.extend(parsed)
+
+    logger.info(f"split_and_parse_ddl: extracted {len(tables)} tables across "
+                f"{len({db for db, _ in blocks})} databases")
+    return tables
 
 
 def parse_ddl_content(content: str, database_name: str) -> List[Dict[str, Any]]:
