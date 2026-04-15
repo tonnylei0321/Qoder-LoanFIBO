@@ -307,3 +307,51 @@ async def test_process_single_table_llm_failure_triggers_fallback():
     assert "DashScope timeout" in str(call_args), (
         f"Expected original error to be passed to fallback. call_args: {call_args}"
     )
+
+
+# ---------------------------------------------------------------------------
+# Test 6: fallback LLM 调用也必须经过 mapping_semaphore（技术债修复）
+# ---------------------------------------------------------------------------
+
+@pytest.mark.asyncio
+async def test_fallback_also_acquires_semaphore():
+    """
+    SPEC: fallback-semaphore-protection
+
+    GIVEN: try_fallback_mapping is called directly with a mock db and table_registry
+    WHEN:  fallback llm.ainvoke is executed
+    THEN:  mapping_semaphore.__aenter__ is invoked (semaphore protects fallback LLM call)
+    """
+    semaphore_acquired = []
+    real_semaphore = asyncio.Semaphore(5)
+    original_aenter = real_semaphore.__class__.__aenter__
+
+    async def tracking_semaphore_aenter(self):
+        semaphore_acquired.append(True)
+        return await original_aenter(self)
+
+    mock_db = AsyncMock()
+    table_registry = make_table_registry()
+
+    mock_llm = MagicMock()
+    mock_llm.ainvoke = AsyncMock(return_value=make_llm_response(VALID_MAPPING_JSON))
+
+    mock_save = AsyncMock()
+
+    with patch.object(type(real_semaphore), "__aenter__", tracking_semaphore_aenter), \
+         patch("backend.app.services.mapping_llm.mapping_semaphore", real_semaphore), \
+         patch("backend.app.services.mapping_llm.ChatOpenAI", return_value=mock_llm), \
+         patch("backend.app.services.mapping_llm.save_mapping_result", mock_save):
+
+        await mapping_llm_module.try_fallback_mapping(
+            db=mock_db,
+            job_id=1,
+            table_registry=table_registry,
+            prompt="test prompt",
+            original_error="primary model failed",
+        )
+
+    assert semaphore_acquired, (
+        "FAIL: mapping_semaphore was NOT acquired during try_fallback_mapping. "
+        "Fallback LLM call is unprotected."
+    )

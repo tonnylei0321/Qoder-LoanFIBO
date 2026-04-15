@@ -192,7 +192,9 @@ async def try_fallback_mapping(db, job_id: int, table_registry: TableRegistry,
             HumanMessage(content=prompt)
         ]
         
-        response = await llm.ainvoke(messages)
+        # Fallback also guarded by semaphore to respect MAX_CONCURRENCY QPS limit
+        async with mapping_semaphore:
+            response = await llm.ainvoke(messages)
         response_text = response.content
         
         latency_ms = int((asyncio.get_event_loop().time() - start_time) * 1000)
