@@ -103,10 +103,8 @@ async def process_single_table(job_id: int, table_registry_id: int) -> Dict[str,
             fields=table_registry.parsed_fields,
             candidate_classes=candidates
         )
-        # Capture scalar values before session closes
+        # Capture table_name before session closes (used in log messages below)
         table_name_snapshot = table_registry.table_name
-        database_name_snapshot = table_registry.database_name
-        parsed_fields_snapshot = table_registry.parsed_fields
 
     # -----------------------------------------------------------------
     # Stage 3: LLM call — ONLY this block is rate-limited

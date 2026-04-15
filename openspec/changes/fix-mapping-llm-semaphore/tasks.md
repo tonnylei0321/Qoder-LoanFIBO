@@ -30,11 +30,11 @@
 
 ## 4. REVIEW — LLM 代码评审
 
-- [ ] 4.1 触发 code-reviewer Skill 对 `mapping_llm.py` 进行评审
-- [ ] 4.2 确认无 P0/P1 问题
-- [ ] 4.3 记录 P2/P3 问题供后续优化
-- [ ] 4.4 如有 P0/P1 问题，修复后重新评审
-- [ ] 4.5 提交：`git commit -m "review: address code-reviewer feedback for mapping_llm"`（如有修改）
+- [x] 4.1 触发 code-reviewer Skill 对 `mapping_llm.py` 进行评审
+- [x] 4.2 确认无 P0/P1 问题
+- [x] 4.3 记录 P2/P3 问题：2个P2（2个死代码变量、fallback不受信号量控制），2个P3（semaphore mock实现、conftest全局mock）
+- [x] 4.4 修复 P2 死代码变量，其余问题记录备查
+- [x] 4.5 提交：`git commit -m "review: address code-reviewer feedback for mapping_llm"`
 
 ## 5. 归档
 
