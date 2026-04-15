@@ -5,12 +5,12 @@ import asyncio
 from typing import Optional, List, Dict, Any
 from loguru import logger
 from langchain_openai import ChatOpenAI
-from langchain.schema import SystemMessage, HumanMessage
+from langchain_core.messages import SystemMessage, HumanMessage
 from sqlalchemy import select
 
 from backend.app.config import settings
 from backend.app.services.pipeline_state import PipelineState
-from backend.app.services.ttl_indexer import search_candidates
+from backend.app.services.candidate_retriever import search_candidates
 from backend.app.prompts.mapping_prompt import (
     MAPPING_SYSTEM_PROMPT,
     build_mapping_prompt,
@@ -18,7 +18,7 @@ from backend.app.prompts.mapping_prompt import (
 )
 from backend.app.models.table_registry import TableRegistry
 from backend.app.models.table_mapping import TableMapping, FieldMapping
-from backend.app.models.llm_call_log import LLMCallLog
+from backend.app.models.mapping_review import LLMCallLog
 from backend.app.database import async_session_factory
 
 
@@ -516,7 +516,7 @@ async def revise_single_mapping(db, table_mapping: TableMapping, revision_round:
         
         # Search for alternative candidates
         keywords = f"{table_mapping.table_name} {table_registry.raw_ddl[:200]}"
-        from backend.app.services.ttl_indexer import search_candidates
+        from backend.app.services.candidate_retriever import search_candidates
         candidate_classes = await search_candidates(keywords, limit=10)
         
         # Build revision prompt

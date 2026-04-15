@@ -86,6 +86,12 @@ _ttl_mock = MagicMock()
 _ttl_mock.search_candidates = AsyncMock(return_value=[])
 sys.modules.setdefault("backend.app.services.ttl_indexer", _ttl_mock)
 
+# Candidate retriever — mocked for mapping_llm tests; test_candidate_retriever.py pops this
+_candidate_retriever_mock = MagicMock()
+_candidate_retriever_mock.search_candidates = AsyncMock(return_value=[])
+_candidate_retriever_mock.retrieve_candidates_node = AsyncMock(side_effect=lambda s: s)
+sys.modules.setdefault("backend.app.services.candidate_retriever", _candidate_retriever_mock)
+
 # Prompts
 _prompt_mock = MagicMock()
 _prompt_mock.MAPPING_SYSTEM_PROMPT = "You are a FIBO mapping expert."

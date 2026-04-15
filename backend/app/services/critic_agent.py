@@ -5,7 +5,7 @@ import asyncio
 from typing import Optional, List, Dict, Any
 from loguru import logger
 from langchain_openai import ChatOpenAI
-from langchain.schema import SystemMessage, HumanMessage
+from langchain_core.messages import SystemMessage, HumanMessage
 from sqlalchemy import select, func, update
 
 from backend.app.config import settings
@@ -20,7 +20,7 @@ from backend.app.models.table_registry import TableRegistry
 from backend.app.models.table_mapping import TableMapping, FieldMapping
 from backend.app.models.ontology_index import OntologyClassIndex
 from backend.app.models.mapping_review import MappingReview
-from backend.app.models.llm_call_log import LLMCallLog
+from backend.app.models.mapping_review import LLMCallLog
 from backend.app.database import async_session_factory
 
 

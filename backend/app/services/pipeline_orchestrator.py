@@ -13,15 +13,27 @@ This module defines the LangGraph state machine that orchestrates the entire map
 from typing import Optional
 from loguru import logger
 from langgraph.graph import StateGraph, END
+from sqlalchemy import select
 
+from backend.app.config import settings
+from backend.app.database import async_session_factory
 from backend.app.services.pipeline_state import PipelineState, PipelinePhase
 
 
 def route_after_mapping(state: PipelineState) -> str:
-    """Route after mapping node: continue batch or move to critic."""
-    # If there are more tables in the batch, continue
+    """After mapping_llm_node clears the batch, always return to fetch_batch.
+
+    fetch_batch_node is responsible for deciding whether to continue loading
+    more pending tables (-> retrieve_candidates) or move on to critic (-> critic)
+    once no pending tables remain.
+    """
+    return "fetch_batch"
+
+
+def route_after_fetch_batch(state: PipelineState) -> str:
+    """After fetch_batch_node, route based on whether any pending tables were found."""
     if state.get("current_batch"):
-        return "continue"
+        return "retrieve_candidates"
     return "critic"
 
 
@@ -34,9 +46,35 @@ def route_after_revision_check(state: PipelineState) -> str:
 
 
 async def fetch_batch_node(state: PipelineState) -> PipelineState:
-    """Fetch next batch of pending tables from table_registry."""
-    logger.info(f"Fetching batch for job_id={state['job_id']}")
-    # TODO: Implement batch fetching logic
+    """Fetch next batch of pending tables from table_registry.
+
+    Queries table_registry for rows with mapping_status='pending', ordered by id,
+    and loads up to BATCH_SIZE ids into state['current_batch'].
+    When no pending tables remain the batch is set to [] and the pipeline
+    transitions to the critic phase via the conditional edge.
+    """
+    from backend.app.models.table_registry import TableRegistry
+
+    job_id = state['job_id']
+    batch_size = settings.BATCH_SIZE
+
+    async with async_session_factory() as db:
+        result = await db.execute(
+            select(TableRegistry.id)
+            .where(
+                TableRegistry.mapping_status == 'pending',
+                TableRegistry.is_deleted == False,
+            )
+            .order_by(TableRegistry.id)
+            .limit(batch_size)
+        )
+        batch_ids = [row[0] for row in result.fetchall()]
+
+    state['current_batch'] = batch_ids
+    if batch_ids:
+        logger.info(f"fetch_batch_node: fetched {len(batch_ids)} tables for job_id={job_id}")
+    else:
+        logger.info(f"fetch_batch_node: no pending tables, moving to critic for job_id={job_id}")
     return state
 
 
@@ -80,16 +118,25 @@ class PipelineOrchestrator:
         # Define edges
         workflow.set_entry_point("parse_ddl")
         workflow.add_edge("parse_ddl", "index_ttl")
-        workflow.add_edge("index_ttl", "fetch_batch")
         
-        # Mapping loop: fetch_batch → retrieve_candidates → mapping_llm → fetch_batch
+        # index_ttl → fetch_batch (conditional: batch found → candidates, empty → critic)
+        workflow.add_edge("index_ttl", "fetch_batch")
+        workflow.add_conditional_edges(
+            "fetch_batch",
+            route_after_fetch_batch,
+            {
+                "retrieve_candidates": "retrieve_candidates",
+                "critic": "critic",
+            }
+        )
+        
+        # Mapping loop: retrieve_candidates → mapping_llm → fetch_batch (loop)
         workflow.add_edge("retrieve_candidates", "mapping_llm")
         workflow.add_conditional_edges(
             "mapping_llm",
             route_after_mapping,
             {
-                "continue": "fetch_batch",
-                "critic": "critic",
+                "fetch_batch": "fetch_batch",
             }
         )
         
