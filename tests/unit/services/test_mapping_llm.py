@@ -1,17 +1,14 @@
-"""Unit tests for mapping_llm.py — RED phase.
+"""Unit tests for mapping_llm.py — RED → GREEN 阶段.
 
-TDD: These tests are written BEFORE the fix.
-They describe the DESIRED behavior after the fix is applied.
-Running them now should FAIL (except unmappable path which may pass).
+TDD: Tests are written BEFORE the fix and define desired behavior.
 """
 import asyncio
 import json
-import importlib
 import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 
-# Must import the module before patching
-import backend.app.services.mapping_llm  # noqa: F401
+# Must import the module before patching so patch() can find it
+import backend.app.services.mapping_llm as mapping_llm_module
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -71,61 +68,59 @@ async def test_semaphore_only_wraps_llm_call():
 
     GIVEN: process_single_table is called with valid table and candidates
     WHEN:  execution flows through DB query → LLM call → save result
-    THEN:  the semaphore is only acquired AROUND llm.ainvoke(), not around db.get()
-           i.e., db.get() is called BEFORE semaphore is acquired (or concurrently)
-
-    This test verifies the call ordering:
-        db.get() → search_candidates() → [acquire semaphore] → llm.ainvoke() → [release semaphore] → save
+    THEN:  db.get() is called BEFORE semaphore is acquired
     """
     call_order = []
 
-    mock_table = make_table_registry()
+    # Patch async_session_factory to track DB access order
+    mock_db_session = MagicMock()
 
-    # Track call order for each operation
-    async def mock_db_get(*args, **kwargs):
+    async def tracking_db_get(*args, **kwargs):
         call_order.append("db_get")
-        return mock_table
+        registry = make_table_registry()
+        return registry
 
-    async def mock_search_candidates(*args, **kwargs):
+    mock_db_session.get = tracking_db_get
+    mock_db_session.add = MagicMock()
+    mock_db_session.flush = AsyncMock()
+    mock_db_session.commit = AsyncMock()
+
+    class MockDbCtx:
+        async def __aenter__(self):
+            return mock_db_session
+        async def __aexit__(self, *args):
+            pass
+
+    # Patch search_candidates to track order
+    async def tracking_search(*args, **kwargs):
         call_order.append("search_candidates")
         return [{"uri": "http://example.com#LoanAccount", "label": "LoanAccount"}]
 
-    async def mock_llm_invoke(*args, **kwargs):
+    # Patch get_mapping_llm to track LLM call order
+    async def tracking_llm_invoke(*args, **kwargs):
         call_order.append("llm_invoke")
         return make_llm_response(VALID_MAPPING_JSON)
 
-    async def mock_save(*args, **kwargs):
-        call_order.append("save_result")
+    mock_llm = MagicMock()
+    mock_llm.ainvoke = tracking_llm_invoke
 
-    # Build a semaphore that records acquire/release
+    # Use real semaphore but wrap its __aenter__ to track acquisition
     real_semaphore = asyncio.Semaphore(5)
-    original_aenter = real_semaphore.__aenter__
+    original_aenter = real_semaphore.__class__.__aenter__
 
-    async def tracked_aenter(*args, **kwargs):
+    async def tracking_semaphore_aenter(self):
         call_order.append("semaphore_acquire")
-        return await original_aenter(*args, **kwargs)
+        return await original_aenter(self)
 
-    real_semaphore.__aenter__ = tracked_aenter
-
-    mock_db_session = AsyncMock()
-    mock_db_session.get = mock_db_get
-    mock_db_ctx = AsyncMock()
-    mock_db_ctx.__aenter__ = AsyncMock(return_value=mock_db_session)
-    mock_db_ctx.__aexit__ = AsyncMock(return_value=None)
-
-    with patch("backend.app.services.mapping_llm.async_session_factory", return_value=mock_db_ctx), \
-         patch("backend.app.services.mapping_llm.search_candidates", side_effect=mock_search_candidates), \
+    with patch.object(type(real_semaphore), "__aenter__", tracking_semaphore_aenter), \
+         patch("backend.app.services.mapping_llm.async_session_factory", return_value=MockDbCtx()), \
+         patch("backend.app.services.mapping_llm.search_candidates", side_effect=tracking_search), \
          patch("backend.app.services.mapping_llm.mapping_semaphore", real_semaphore), \
-         patch("backend.app.services.mapping_llm.save_mapping_result", side_effect=mock_save):
+         patch("backend.app.services.mapping_llm.get_mapping_llm", return_value=mock_llm), \
+         patch("backend.app.services.mapping_llm.save_mapping_result", new_callable=AsyncMock):
 
-        mock_llm = MagicMock()
-        mock_llm.ainvoke = mock_llm_invoke
+        await mapping_llm_module.process_single_table(job_id=1, table_registry_id=100)
 
-        with patch("backend.app.services.mapping_llm.get_mapping_llm", return_value=mock_llm):
-            from backend.app.services.mapping_llm import process_single_table
-            await process_single_table(job_id=1, table_registry_id=100)
-
-    # ASSERT: db_get must come before semaphore_acquire
     assert "db_get" in call_order, "db_get was not called"
     assert "semaphore_acquire" in call_order, "semaphore was never acquired"
     assert "llm_invoke" in call_order, "llm_invoke was not called"
@@ -157,31 +152,30 @@ async def test_process_single_table_success():
     WHEN:  process_single_table is called
     THEN:  returns {"status": "success"} and save_mapping_result is called once
     """
-    mock_table = make_table_registry()
-    mock_candidates = [{"uri": "http://example.com#LoanAccount", "label": "LoanAccount"}]
+    mock_db_session = MagicMock()
+    mock_db_session.get = AsyncMock(return_value=make_table_registry())
+    mock_db_session.add = MagicMock()
+    mock_db_session.flush = AsyncMock()
+    mock_db_session.commit = AsyncMock()
 
-    mock_db_session = AsyncMock()
-    mock_db_session.get = AsyncMock(return_value=mock_table)
-    mock_db_ctx = AsyncMock()
-    mock_db_ctx.__aenter__ = AsyncMock(return_value=mock_db_session)
-    mock_db_ctx.__aexit__ = AsyncMock(return_value=None)
+    class MockDbCtx:
+        async def __aenter__(self):
+            return mock_db_session
+        async def __aexit__(self, *args):
+            pass
 
     mock_save = AsyncMock()
 
-    with patch("backend.app.services.mapping_llm.async_session_factory", return_value=mock_db_ctx), \
-         patch("backend.app.services.mapping_llm.search_candidates", return_value=mock_candidates), \
+    with patch("backend.app.services.mapping_llm.async_session_factory", return_value=MockDbCtx()), \
+         patch("backend.app.services.mapping_llm.search_candidates",
+               return_value=[{"uri": "http://example.com#LoanAccount", "label": "LoanAccount"}]), \
          patch("backend.app.services.mapping_llm.save_mapping_result", mock_save):
 
         mock_llm = MagicMock()
         mock_llm.ainvoke = AsyncMock(return_value=make_llm_response(VALID_MAPPING_JSON))
 
         with patch("backend.app.services.mapping_llm.get_mapping_llm", return_value=mock_llm):
-            from backend.app.services import mapping_llm
-            # Reload to pick up fresh module state
-            import importlib
-            importlib.reload(mapping_llm)
-
-            result = await mapping_llm.process_single_table(job_id=1, table_registry_id=100)
+            result = await mapping_llm_module.process_single_table(job_id=1, table_registry_id=100)
 
     assert result["status"] == "success", f"Expected 'success', got: {result}"
     mock_save.assert_called_once()
@@ -200,33 +194,36 @@ async def test_process_single_table_uncertainty_exit():
     WHEN:  process_single_table is called
     THEN:  returns {"status": "uncertainty"} and save_mapping_result is NOT called
     """
-    mock_table = make_table_registry()
-    mock_candidates = [{"uri": "http://example.com#LoanAccount", "label": "LoanAccount"}]
+    mock_db_session = MagicMock()
+    mock_db_session.get = AsyncMock(return_value=make_table_registry())
+    mock_db_session.add = MagicMock()
+    mock_db_session.flush = AsyncMock()
+    mock_db_session.commit = AsyncMock()
 
-    mock_db_session = AsyncMock()
-    mock_db_session.get = AsyncMock(return_value=mock_table)
-    mock_db_ctx = AsyncMock()
-    mock_db_ctx.__aenter__ = AsyncMock(return_value=mock_db_session)
-    mock_db_ctx.__aexit__ = AsyncMock(return_value=None)
+    class MockDbCtx:
+        async def __aenter__(self):
+            return mock_db_session
+        async def __aexit__(self, *args):
+            pass
 
     mock_save = AsyncMock()
+    mock_handle_uncertainty = AsyncMock()
 
-    with patch("backend.app.services.mapping_llm.async_session_factory", return_value=mock_db_ctx), \
-         patch("backend.app.services.mapping_llm.search_candidates", return_value=mock_candidates), \
-         patch("backend.app.services.mapping_llm.save_mapping_result", mock_save):
+    with patch("backend.app.services.mapping_llm.async_session_factory", return_value=MockDbCtx()), \
+         patch("backend.app.services.mapping_llm.search_candidates",
+               return_value=[{"uri": "http://example.com#LoanAccount", "label": "LoanAccount"}]), \
+         patch("backend.app.services.mapping_llm.save_mapping_result", mock_save), \
+         patch("backend.app.services.mapping_llm.handle_uncertainty", mock_handle_uncertainty):
 
         mock_llm = MagicMock()
         mock_llm.ainvoke = AsyncMock(return_value=make_llm_response(UNCERTAINTY_EXIT_JSON))
 
         with patch("backend.app.services.mapping_llm.get_mapping_llm", return_value=mock_llm):
-            from backend.app.services import mapping_llm
-            import importlib
-            importlib.reload(mapping_llm)
-
-            result = await mapping_llm.process_single_table(job_id=1, table_registry_id=100)
+            result = await mapping_llm_module.process_single_table(job_id=1, table_registry_id=100)
 
     assert result["status"] == "uncertainty", f"Expected 'uncertainty', got: {result}"
     mock_save.assert_not_called()
+    mock_handle_uncertainty.assert_called_once()
 
 
 # ---------------------------------------------------------------------------
@@ -242,25 +239,25 @@ async def test_process_single_table_no_candidates():
     WHEN:  process_single_table is called
     THEN:  returns {"status": "unmappable"} and mark_unmappable is called
     """
-    mock_table = make_table_registry()
+    mock_db_session = MagicMock()
+    mock_db_session.get = AsyncMock(return_value=make_table_registry())
+    mock_db_session.add = MagicMock()
+    mock_db_session.flush = AsyncMock()
+    mock_db_session.commit = AsyncMock()
 
-    mock_db_session = AsyncMock()
-    mock_db_session.get = AsyncMock(return_value=mock_table)
-    mock_db_ctx = AsyncMock()
-    mock_db_ctx.__aenter__ = AsyncMock(return_value=mock_db_session)
-    mock_db_ctx.__aexit__ = AsyncMock(return_value=None)
+    class MockDbCtx:
+        async def __aenter__(self):
+            return mock_db_session
+        async def __aexit__(self, *args):
+            pass
 
     mock_mark_unmappable = AsyncMock()
 
-    with patch("backend.app.services.mapping_llm.async_session_factory", return_value=mock_db_ctx), \
+    with patch("backend.app.services.mapping_llm.async_session_factory", return_value=MockDbCtx()), \
          patch("backend.app.services.mapping_llm.search_candidates", return_value=[]), \
          patch("backend.app.services.mapping_llm.mark_unmappable", mock_mark_unmappable):
 
-        from backend.app.services import mapping_llm
-        import importlib
-        importlib.reload(mapping_llm)
-
-        result = await mapping_llm.process_single_table(job_id=1, table_registry_id=100)
+        result = await mapping_llm_module.process_single_table(job_id=1, table_registry_id=100)
 
     assert result["status"] == "unmappable", f"Expected 'unmappable', got: {result}"
     mock_mark_unmappable.assert_called_once()
@@ -277,36 +274,36 @@ async def test_process_single_table_llm_failure_triggers_fallback():
 
     GIVEN: llm.ainvoke raises an exception
     WHEN:  process_single_table is called
-    THEN:  try_fallback_mapping is called with the original error
+    THEN:  try_fallback_mapping is called with the original error message
     """
-    mock_table = make_table_registry()
-    mock_candidates = [{"uri": "http://example.com#LoanAccount", "label": "LoanAccount"}]
+    mock_db_session = MagicMock()
+    mock_db_session.get = AsyncMock(return_value=make_table_registry())
+    mock_db_session.add = MagicMock()
+    mock_db_session.flush = AsyncMock()
+    mock_db_session.commit = AsyncMock()
 
-    mock_db_session = AsyncMock()
-    mock_db_session.get = AsyncMock(return_value=mock_table)
-    mock_db_ctx = AsyncMock()
-    mock_db_ctx.__aenter__ = AsyncMock(return_value=mock_db_session)
-    mock_db_ctx.__aexit__ = AsyncMock(return_value=None)
+    class MockDbCtx:
+        async def __aenter__(self):
+            return mock_db_session
+        async def __aexit__(self, *args):
+            pass
 
     mock_fallback = AsyncMock(return_value={"status": "success_fallback"})
 
-    with patch("backend.app.services.mapping_llm.async_session_factory", return_value=mock_db_ctx), \
-         patch("backend.app.services.mapping_llm.search_candidates", return_value=mock_candidates), \
+    with patch("backend.app.services.mapping_llm.async_session_factory", return_value=MockDbCtx()), \
+         patch("backend.app.services.mapping_llm.search_candidates",
+               return_value=[{"uri": "http://example.com#LoanAccount", "label": "LoanAccount"}]), \
          patch("backend.app.services.mapping_llm.try_fallback_mapping", mock_fallback):
 
         mock_llm = MagicMock()
         mock_llm.ainvoke = AsyncMock(side_effect=Exception("DashScope timeout"))
 
         with patch("backend.app.services.mapping_llm.get_mapping_llm", return_value=mock_llm):
-            from backend.app.services import mapping_llm
-            import importlib
-            importlib.reload(mapping_llm)
-
-            result = await mapping_llm.process_single_table(job_id=1, table_registry_id=100)
+            result = await mapping_llm_module.process_single_table(job_id=1, table_registry_id=100)
 
     mock_fallback.assert_called_once()
-    # The original error should be passed to fallback
-    call_kwargs = mock_fallback.call_args
-    assert "DashScope timeout" in str(call_kwargs), (
-        f"Expected original error to be passed to fallback. call_args: {call_kwargs}"
+    call_args = mock_fallback.call_args
+    # Verify original error message is passed to fallback
+    assert "DashScope timeout" in str(call_args), (
+        f"Expected original error to be passed to fallback. call_args: {call_args}"
     )

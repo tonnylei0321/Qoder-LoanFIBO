@@ -30,6 +30,7 @@ class Settings(BaseSettings):
     
     # LLM Models
     MAPPING_MODEL: str = "qwen-long"
+    MAPPING_FALLBACK_MODEL: str = "qwen-max"   # Fallback for mapping when primary fails
     CRITIC_MODEL: str = "qwen-max"
     REVISION_MODEL: str = "qwen-max"
     

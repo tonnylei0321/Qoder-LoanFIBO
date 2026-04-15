@@ -66,78 +66,118 @@ async def mapping_llm_node(state: PipelineState) -> PipelineState:
 
 
 async def process_single_table(job_id: int, table_registry_id: int) -> Dict[str, Any]:
-    """Process mapping for a single table."""
-    async with mapping_semaphore:
-        async with async_session_factory() as db:
-            # Get table info
-            table_registry = await db.get(TableRegistry, table_registry_id)
-            if not table_registry:
-                logger.error(f"Table registry not found: {table_registry_id}")
-                return {"error": "Table not found"}
-            
-            # Search for candidate classes
-            keywords = f"{table_registry.table_name} {table_registry.raw_ddl[:200]}"
-            candidates = await search_candidates(keywords, limit=settings.CANDIDATE_LIMIT)
-            
-            if not candidates:
-                logger.warning(f"No candidates found for table: {table_registry.table_name}")
-                # Mark as unmappable
-                await mark_unmappable(db, job_id, table_registry)
-                return {"status": "unmappable", "reason": "No candidates"}
-            
-            # Build prompt
-            prompt = build_mapping_prompt(
-                database_name=table_registry.database_name,
-                table_name=table_registry.table_name,
-                table_comment=table_registry.raw_ddl[:100],  # Use first 100 chars as comment
-                fields=table_registry.parsed_fields,
-                candidate_classes=candidates
+    """Process mapping for a single table.
+    
+    Execution stages (semaphore ONLY wraps LLM call):
+      1. DB query      — no rate-limit, high parallelism allowed
+      2. Vector search — no rate-limit, high parallelism allowed
+      3. LLM call      — guarded by mapping_semaphore (QPS control)
+      4. Save result   — no rate-limit, high parallelism allowed
+    """
+    # -----------------------------------------------------------------
+    # Stage 1 & 2: DB query + vector search (outside semaphore)
+    # -----------------------------------------------------------------
+    async with async_session_factory() as db:
+        table_registry = await db.get(TableRegistry, table_registry_id)
+        if not table_registry:
+            logger.error(f"Table registry not found: {table_registry_id}")
+            return {"error": "Table not found"}
+
+        # Search for candidate classes
+        keywords = f"{table_registry.table_name} {table_registry.raw_ddl[:200]}"
+        candidates = await search_candidates(keywords, limit=settings.CANDIDATE_LIMIT)
+
+        if not candidates:
+            logger.warning(f"No candidates found for table: {table_registry.table_name}")
+            await mark_unmappable(db, job_id, table_registry)
+            return {"status": "unmappable", "reason": "No candidates"}
+
+        # Build prompt (needs table_registry data, must be inside session scope)
+        prompt = build_mapping_prompt(
+            database_name=table_registry.database_name,
+            table_name=table_registry.table_name,
+            table_comment=table_registry.raw_ddl[:100],
+            fields=table_registry.parsed_fields,
+            candidate_classes=candidates
+        )
+        # Capture scalar values before session closes
+        table_name_snapshot = table_registry.table_name
+        database_name_snapshot = table_registry.database_name
+        parsed_fields_snapshot = table_registry.parsed_fields
+
+    # -----------------------------------------------------------------
+    # Stage 3: LLM call — ONLY this block is rate-limited
+    # -----------------------------------------------------------------
+    llm = get_mapping_llm()
+    messages = [
+        SystemMessage(content=MAPPING_SYSTEM_PROMPT),
+        HumanMessage(content=prompt)
+    ]
+    start_time = asyncio.get_event_loop().time()
+
+    try:
+        async with mapping_semaphore:
+            response = await llm.ainvoke(messages)
+
+        response_text = response.content
+        latency_ms = int((asyncio.get_event_loop().time() - start_time) * 1000)
+
+        # Parse JSON response
+        mapping_result = parse_mapping_response(response_text)
+
+        if not mapping_result:
+            async with async_session_factory() as db:
+                # Re-fetch registry for save operations
+                table_registry = await db.get(TableRegistry, table_registry_id)
+                await handle_parse_error(db, job_id, table_registry, response_text)
+            return {"status": "parse_error"}
+
+        # -----------------------------------------------------------------
+        # uncertainty_exit check (llm-caller principle 6)
+        # -----------------------------------------------------------------
+        if mapping_result.get("uncertainty_exit"):
+            exit_info = mapping_result["uncertainty_exit"]
+            logger.warning(
+                f"LLM uncertainty for table {table_name_snapshot}: {exit_info.get('reason', 'unknown')}"
             )
-            
-            # Call LLM
-            llm = get_mapping_llm()
-            start_time = asyncio.get_event_loop().time()
-            
-            try:
-                messages = [
-                    SystemMessage(content=MAPPING_SYSTEM_PROMPT),
-                    HumanMessage(content=prompt)
-                ]
-                
-                response = await llm.ainvoke(messages)
-                response_text = response.content
-                
-                # Calculate latency
-                latency_ms = int((asyncio.get_event_loop().time() - start_time) * 1000)
-                
-                # Parse JSON response
-                mapping_result = parse_mapping_response(response_text)
-                
-                if not mapping_result:
-                    # JSON parse error
-                    await handle_parse_error(db, job_id, table_registry, response_text)
-                    return {"status": "parse_error"}
-                
-                # Save mapping result
-                await save_mapping_result(db, job_id, table_registry, mapping_result, 
-                                         settings.MAPPING_MODEL, response.usage.total_tokens if hasattr(response, 'usage') else 0, latency_ms)
-                
-                return {"status": "success", "mapping": mapping_result}
-                
-            except Exception as e:
-                logger.error(f"LLM call failed for table {table_registry.table_name}: {str(e)}")
-                # Try fallback model
-                return await try_fallback_mapping(db, job_id, table_registry, prompt, str(e))
+            async with async_session_factory() as db:
+                table_registry = await db.get(TableRegistry, table_registry_id)
+                await handle_uncertainty(db, job_id, table_registry, exit_info)
+            return {"status": "uncertainty", "reason": exit_info.get("reason", "")}
+
+        # -----------------------------------------------------------------
+        # Stage 4: Save result (outside semaphore)
+        # -----------------------------------------------------------------
+        async with async_session_factory() as db:
+            table_registry = await db.get(TableRegistry, table_registry_id)
+            await save_mapping_result(
+                db=db,
+                job_id=job_id,
+                table_registry=table_registry,
+                mapping_result=mapping_result,
+                model_used=settings.MAPPING_MODEL,
+                tokens=response.usage.total_tokens if hasattr(response, 'usage') else 0,
+                latency_ms=latency_ms,
+            )
+
+        return {"status": "success", "mapping": mapping_result}
+
+    except Exception as e:
+        logger.error(f"LLM call failed for table {table_name_snapshot}: {str(e)}")
+        # Try fallback model
+        async with async_session_factory() as db:
+            table_registry = await db.get(TableRegistry, table_registry_id)
+            return await try_fallback_mapping(db, job_id, table_registry, prompt, str(e))
 
 
 async def try_fallback_mapping(db, job_id: int, table_registry: TableRegistry, 
                                 prompt: str, original_error: str) -> Dict[str, Any]:
-    """Try fallback model (qwen-max) if qwen-long fails."""
+    """Try fallback model if primary mapping model fails."""
     logger.info(f"Trying fallback model for table: {table_registry.table_name}")
     
     try:
         llm = ChatOpenAI(
-            model=settings.CRITIC_MODEL,  # Use qwen-max as fallback
+            model=settings.MAPPING_FALLBACK_MODEL,  # Dedicated fallback config
             openai_api_key=settings.DASHSCOPE_API_KEY,
             openai_api_base=settings.DASHSCOPE_API_BASE,
             temperature=settings.LLM_TEMPERATURE,
@@ -188,7 +228,11 @@ def parse_mapping_response(response_text: str) -> Optional[Dict[str, Any]]:
         json_str = json_str.strip()
         result = json.loads(json_str)
         
-        # Basic validation
+        # Basic validation:
+        # - uncertainty_exit is always valid (LLM signals it cannot map with confidence)
+        # - normal mapping must have 'mappable' and 'field_mappings'
+        if "uncertainty_exit" in result:
+            return result  # Valid uncertainty response
         if "mappable" not in result or "field_mappings" not in result:
             logger.error("Invalid mapping response: missing required fields")
             return None
@@ -285,13 +329,38 @@ async def handle_parse_error(db, job_id: int, table_registry: TableRegistry,
         job_id=job_id,
         table_mapping_id=table_mapping.id,
         call_type='mapping',
-        model_name=settings.MAPPING_MODEL if not is_fallback else settings.CRITIC_MODEL,
+        model_name=settings.MAPPING_MODEL if not is_fallback else settings.MAPPING_FALLBACK_MODEL,
         is_fallback=is_fallback,
         error_message=f"JSON parse error. Raw response: {raw_response[:500]}",
     )
     db.add(llm_log)
     
     table_registry.mapping_status = 'llm_parse_error'
+    await db.commit()
+
+
+async def handle_uncertainty(db, job_id: int, table_registry: TableRegistry, exit_info: Dict[str, Any]):
+    """Handle LLM uncertainty_exit response (llm-caller principle 6)."""
+    table_mapping = TableMapping(
+        job_id=job_id,
+        database_name=table_registry.database_name,
+        table_name=table_registry.table_name,
+        mapping_status='llm_uncertainty',
+        review_status='manual_review_required',
+    )
+    db.add(table_mapping)
+    await db.flush()
+
+    llm_log = LLMCallLog(
+        job_id=job_id,
+        table_mapping_id=table_mapping.id,
+        call_type='mapping',
+        model_name=settings.MAPPING_MODEL,
+        error_message=f"LLM uncertainty: {exit_info.get('reason', 'unknown')} (confidence={exit_info.get('confidence', 'N/A')})",
+    )
+    db.add(llm_log)
+
+    table_registry.mapping_status = 'llm_uncertainty'
     await db.commit()
 
 
