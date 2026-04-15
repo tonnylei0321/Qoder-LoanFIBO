@@ -1,0 +1,138 @@
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix fibo-fnd-utl-av: <https://spec.edmcouncil.org/fibo/ontology/FND/Utilities/AnnotationVocabulary/> .
+@prefix cap: <https://ontology.mof.gov.cn/sasac/capital/> .
+@prefix ent: <https://ontology.mof.gov.cn/sasac/enterprise/> .
+@prefix fin: <https://ontology.mof.gov.cn/sasac/finance/> .
+
+# 资本类
+
+cap:CapitalTransaction rdf:type owl:Class ;
+    rdfs:label "Capital Transaction"@en , "资金交易"@zh ;
+    rdfs:comment "A transaction involving the movement of capital funds between accounts or entities."@en ,
+                 "涉及资金在账户或实体之间流动的交易。"@zh ;
+    rdfs:subClassOf cap:FinancialActivity ;
+    fibo-fnd-utl-av:definitionOrigin "SASAC Capital Management Ontology"@en .
+
+cap:CapitalInflow rdf:type owl:Class ;
+    rdfs:label "Capital Inflow"@en , "资金流入"@zh ;
+    rdfs:comment "Capital funds flowing into an account or entity."@en ,
+                 "流入账户或实体的资金。"@zh ;
+    rdfs:subClassOf cap:CapitalTransaction .
+
+cap:CapitalOutflow rdf:type owl:Class ;
+    rdfs:label "Capital Outflow"@en , "资金流出"@zh ;
+    rdfs:comment "Capital funds flowing out from an account or entity."@en ,
+                 "从账户或实体流出的资金。"@zh ;
+    rdfs:subClassOf cap:CapitalTransaction .
+
+cap:Contract rdf:type owl:Class ;
+    rdfs:label "Contract"@en , "合同"@zh ;
+    rdfs:comment "A legally binding agreement between two or more parties."@en ,
+                 "两方或多方之间具有法律约束力的协议。"@zh ;
+    rdfs:subClassOf cap:LegalDocument .
+
+cap:ContractChangeEvent rdf:type owl:Class ;
+    rdfs:label "Contract Change Event"@en , "合同变更事件"@zh ;
+    rdfs:comment "An event that modifies the terms or conditions of a contract."@en ,
+                 "修改合同条款或条件的事件。"@zh ;
+    rdfs:subClassOf cap:BusinessEvent .
+
+# 企业类
+
+ent:StateOwnedEnterprise rdf:type owl:Class ;
+    rdfs:label "State-Owned Enterprise"@en , "国有企业"@zh ;
+    rdfs:comment "An enterprise owned and controlled by the state or government."@en ,
+                 "由国家或政府拥有和控制的企业。"@zh ;
+    rdfs:subClassOf ent:Enterprise .
+
+ent:Enterprise rdf:type owl:Class ;
+    rdfs:label "Enterprise"@en , "企业"@zh ;
+    rdfs:comment "A business organization engaged in commercial, industrial, or professional activities."@en ,
+                 "从事商业、工业或专业活动的商业组织。"@zh .
+
+# 财务类
+
+fin:Voucher rdf:type owl:Class ;
+    rdfs:label "Voucher"@en , "凭证"@zh ;
+    rdfs:comment "A document that serves as evidence of a financial transaction."@en ,
+                 "作为财务交易证据的文档。"@zh ;
+    rdfs:subClassOf fin:AccountingDocument .
+
+fin:VoucherEntry rdf:type owl:Class ;
+    rdfs:label "Voucher Entry"@en , "凭证明细"@zh ;
+    rdfs:comment "An individual line item within a voucher."@en ,
+                 "凭证中的单个明细行项目。"@zh ;
+    rdfs:subClassOf fin:AccountingEntry .
+
+fin:Account rdf:type owl:Class ;
+    rdfs:label "Account"@en , "会计科目"@zh ;
+    rdfs:comment "A record of financial transactions for a specific category."@en ,
+                 "特定类别的财务交易记录。"@zh .
+
+# 属性定义
+
+cap:hasTransactionDate rdf:type owl:DatatypeProperty ;
+    rdfs:label "has transaction date"@en , "交易日期"@zh ;
+    rdfs:comment "The date when the transaction occurred."@en ,
+                 "交易发生的日期。"@zh ;
+    rdfs:domain cap:CapitalTransaction ;
+    rdfs:range xsd:date .
+
+cap:hasTransactionAmount rdf:type owl:DatatypeProperty ;
+    rdfs:label "has transaction amount"@en , "交易金额"@zh ;
+    rdfs:comment "The monetary amount of the transaction."@en ,
+                 "交易的货币金额。"@zh ;
+    rdfs:domain cap:CapitalTransaction ;
+    rdfs:range xsd:decimal .
+
+cap:hasContractNumber rdf:type owl:DatatypeProperty ;
+    rdfs:label "has contract number"@en , "合同编号"@zh ;
+    rdfs:comment "The unique identifier of a contract."@en ,
+                 "合同的唯一标识符。"@zh ;
+    rdfs:domain cap:Contract ;
+    rdfs:range xsd:string .
+
+cap:hasContractAmount rdf:type owl:DatatypeProperty ;
+    rdfs:label "has contract amount"@en , "合同金额"@zh ;
+    rdfs:comment "The total monetary value of the contract."@en ,
+                 "合同的总货币价值。"@zh ;
+    rdfs:domain cap:Contract ;
+    rdfs:range xsd:decimal .
+
+cap:hasCounterparty rdf:type owl:ObjectProperty ;
+    rdfs:label "has counterparty"@en , "交易对手"@zh ;
+    rdfs:comment "The other party involved in the transaction or contract."@en ,
+                 "交易或合同中涉及的另一方。"@zh ;
+    rdfs:domain cap:Contract ;
+    rdfs:range ent:Enterprise .
+
+fin:hasVoucherNumber rdf:type owl:DatatypeProperty ;
+    rdfs:label "has voucher number"@en , "凭证号"@zh ;
+    rdfs:comment "The unique identifier of a voucher."@en ,
+                 "凭证的唯一标识符。"@zh ;
+    rdfs:domain fin:Voucher ;
+    rdfs:range xsd:string .
+
+fin:hasDebitAmount rdf:type owl:DatatypeProperty ;
+    rdfs:label "has debit amount"@en , "借方金额"@zh ;
+    rdfs:comment "The debit amount in an accounting entry."@en ,
+                 "会计分录中的借方金额。"@zh ;
+    rdfs:domain fin:VoucherEntry ;
+    rdfs:range xsd:decimal .
+
+fin:hasCreditAmount rdf:type owl:DatatypeProperty ;
+    rdfs:label "has credit amount"@en , "贷方金额"@zh ;
+    rdfs:comment "The credit amount in an accounting entry."@en ,
+                 "会计分录中的贷方金额。"@zh ;
+    rdfs:domain fin:VoucherEntry ;
+    rdfs:range xsd:decimal .
+
+fin:hasAccountCode rdf:type owl:DatatypeProperty ;
+    rdfs:label "has account code"@en , "科目代码"@zh ;
+    rdfs:comment "The code identifying the account."@en ,
+                 "标识科目的代码。"@zh ;
+    rdfs:domain fin:Account ;
+    rdfs:range xsd:string .
