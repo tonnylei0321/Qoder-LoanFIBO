@@ -7,6 +7,7 @@ FastAPI application entry point.
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 from loguru import logger
 
 from backend.app.config import settings
@@ -46,9 +47,15 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Include routers
-from backend.app.api.v1 import pipeline
+# Include API routers
+from backend.app.api.v1 import pipeline, files, jobs, auth
 app.include_router(pipeline.router, prefix=settings.API_V1_STR, tags=["pipeline"])
+app.include_router(files.router, prefix=settings.API_V1_STR, tags=["files"])
+app.include_router(jobs.router, prefix=settings.API_V1_STR, tags=["jobs"])
+app.include_router(auth.router, prefix=settings.API_V1_STR, tags=["auth"])
+
+# Mount static files (frontend)
+app.mount("/", StaticFiles(directory="backend/app/static", html=True), name="static")
 
 
 @app.get("/health")
