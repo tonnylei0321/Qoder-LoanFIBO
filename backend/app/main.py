@@ -48,11 +48,15 @@ app.add_middleware(
 )
 
 # Include API routers
-from backend.app.api.v1 import pipeline, files, jobs, auth
+from backend.app.api.v1 import pipeline, files, jobs, auth, loan_analysis, query, rules, tenant
 app.include_router(pipeline.router, prefix=settings.API_V1_STR, tags=["pipeline"])
 app.include_router(files.router, prefix=settings.API_V1_STR, tags=["files"])
 app.include_router(jobs.router, prefix=settings.API_V1_STR, tags=["jobs"])
 app.include_router(auth.router, prefix=settings.API_V1_STR, tags=["auth"])
+app.include_router(loan_analysis.router, prefix=settings.API_V1_STR, tags=["loan-analysis"])
+app.include_router(query.router, prefix=settings.API_V1_STR, tags=["query"])
+app.include_router(rules.router, prefix=settings.API_V1_STR, tags=["rules"])
+app.include_router(tenant.router, prefix=settings.API_V1_STR, tags=["tenant"])
 
 # Mount static files (frontend)
 app.mount("/", StaticFiles(directory="backend/app/static", html=True), name="static")
