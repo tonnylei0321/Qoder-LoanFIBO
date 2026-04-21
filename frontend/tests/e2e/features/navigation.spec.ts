@@ -16,6 +16,9 @@ test.describe('Navigation', () => {
     { path: '/loan-analysis/pre-loan', title: /贷前|Pre/ },
     { path: '/loan-analysis/post-loan', title: /贷后|Post/ },
     { path: '/loan-analysis/supply-chain', title: /供应链|Supply/ },
+    { path: '/rules/nlq-query', title: /NLQ|查询/ },
+    { path: '/rules/manager', title: /规则/ },
+    { path: '/rules/compile-status', title: /编译|状态/ },
   ]
 
   for (const route of routes) {

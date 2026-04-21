@@ -69,6 +69,31 @@
         </div>
         
         <div class="nav-section">
+          <div class="nav-label" v-show="!sidebarCollapsed">规则引擎</div>
+          <router-link to="/rules/nlq-query" class="nav-item" :class="{ active: $route.path === '/rules/nlq-query' }">
+            <div class="nav-icon">
+              <el-icon><Search /></el-icon>
+            </div>
+            <span class="nav-text" v-show="!sidebarCollapsed">NLQ 查询</span>
+            <div class="nav-glow"></div>
+          </router-link>
+          <router-link to="/rules/manager" class="nav-item" :class="{ active: $route.path === '/rules/manager' }">
+            <div class="nav-icon">
+              <el-icon><SetUp /></el-icon>
+            </div>
+            <span class="nav-text" v-show="!sidebarCollapsed">规则管理</span>
+            <div class="nav-glow"></div>
+          </router-link>
+          <router-link to="/rules/compile-status" class="nav-item" :class="{ active: $route.path === '/rules/compile-status' }">
+            <div class="nav-icon">
+              <el-icon><Monitor /></el-icon>
+            </div>
+            <span class="nav-text" v-show="!sidebarCollapsed">编译状态</span>
+            <div class="nav-glow"></div>
+          </router-link>
+        </div>
+
+        <div class="nav-section">
           <div class="nav-label" v-show="!sidebarCollapsed">质量控制</div>
           <router-link to="/reviews" class="nav-item" :class="{ active: $route.path === '/reviews' }">
             <div class="nav-icon">
@@ -240,6 +265,9 @@ const routeTitleMap: Record<string, string> = {
   'pre-loan': '贷前尽调',
   'post-loan': '贷后监控',
   'supply-chain': '供应链金融',
+  'nlq-query': 'NLQ 查询',
+  'rules-manager': '规则管理',
+  'compile-status': '编译状态',
 }
 
 const routeTitle = computed(() => {

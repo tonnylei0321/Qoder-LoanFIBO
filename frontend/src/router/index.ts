@@ -17,6 +17,9 @@ import SettingsView from '@/views/settings/SettingsView.vue'
 import PreLoanView from '@/views/loan-analysis/PreLoanView.vue'
 import PostLoanView from '@/views/loan-analysis/PostLoanView.vue'
 import SupplyChainView from '@/views/loan-analysis/SupplyChainView.vue'
+import NLQQueryView from '@/views/rules/NLQQueryView.vue'
+import RulesManagerView from '@/views/rules/RulesManagerView.vue'
+import CompileStatusView from '@/views/rules/CompileStatusView.vue'
 
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
@@ -92,6 +95,21 @@ const router = createRouter({
           path: 'loan-analysis/supply-chain',
           name: 'supply-chain',
           component: SupplyChainView,
+        },
+        {
+          path: 'rules/nlq-query',
+          name: 'nlq-query',
+          component: NLQQueryView,
+        },
+        {
+          path: 'rules/manager',
+          name: 'rules-manager',
+          component: RulesManagerView,
+        },
+        {
+          path: 'rules/compile-status',
+          name: 'compile-status',
+          component: CompileStatusView,
         },
       ],
     },
