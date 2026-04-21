@@ -10,6 +10,7 @@ class TableRegistry(Base):
     id = Column(BigInteger, primary_key=True, autoincrement=True)
     database_name = Column(String(128), nullable=False)
     table_name = Column(String(256), nullable=False)
+    table_comment = Column(String(512), nullable=True)  # Table-level comment/description
     raw_ddl = Column(Text, nullable=False)
     parsed_fields = Column(JSON, nullable=False, default=list)
     mapping_status = Column(String(32), nullable=False, default="pending")

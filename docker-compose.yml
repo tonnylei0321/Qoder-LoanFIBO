@@ -36,10 +36,32 @@ services:
       timeout: 5s
       retries: 5
 
+  graphdb:
+    image: ontotext/graphdb:10.7.3
+    container_name: loanfibo-graphdb
+    ports:
+      - "7200:7200"
+    volumes:
+      - graphdb_data:/opt/graphdb/home
+      - ./docs/fibo-master_2025Q4:/opt/fibo:ro
+    environment:
+      GDB_HEAP_SIZE: 4g
+      GDB_MIN_MEM: 1g
+    networks:
+      - loanfibo-network
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:7200/rest/repositories || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+
 volumes:
   postgres_data:
     driver: local
   redis_data:
+    driver: local
+  graphdb_data:
     driver: local
 
 networks:

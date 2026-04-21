@@ -59,10 +59,24 @@ async def mapping_llm_node(state: PipelineState) -> PipelineState:
     # Clear batch after processing
     state['current_batch'] = []
     
-    # Check for errors
-    errors = [r for r in results if isinstance(r, Exception)]
-    if errors:
-        logger.error(f"[mapping_llm_node] {len(errors)} tables failed to map")
+    # Check for errors and mark failed tables to prevent infinite loop
+    failed_table_ids = []
+    for idx, result in enumerate(results):
+        if isinstance(result, Exception):
+            failed_table_ids.append(current_batch[idx])
+            logger.error(f"[mapping_llm_node] Table {current_batch[idx]} failed: {result}")
+    
+    if failed_table_ids:
+        # Mark failed tables as 'llm_error' to prevent re-fetching
+        async with async_session_factory() as db:
+            from backend.app.models.table_registry import TableRegistry
+            for table_id in failed_table_ids:
+                table = await db.get(TableRegistry, table_id)
+                if table:
+                    table.mapping_status = 'llm_error'
+                    db.add(table)
+            await db.commit()
+        logger.error(f"[mapping_llm_node] {len(failed_table_ids)} tables marked as llm_error")
     
     logger.info(f"[mapping_llm_node] LLM mapping completed: {len(results)} tables processed")
     return state
@@ -86,9 +100,26 @@ async def process_single_table(job_id: int, table_registry_id: int) -> Dict[str,
             logger.error(f"Table registry not found: {table_registry_id}")
             return {"error": "Table not found"}
 
-        # Search for candidate classes
-        keywords = f"{table_registry.table_name} {table_registry.raw_ddl[:DDL_KEYWORD_PREVIEW_LEN]}"
-        candidates = await search_candidates(keywords, limit=settings.CANDIDATE_LIMIT)
+        # Build keywords for FIBO candidate search
+        # Use table comment + field comments + table name (English) for best recall
+        comment_parts = []
+        if table_registry.table_comment:
+            comment_parts.append(table_registry.table_comment)
+        parsed_fields = table_registry.parsed_fields or []
+        field_comments = [
+            f.get('comment', '') for f in parsed_fields[:10]
+            if f.get('comment')
+        ]
+        comment_parts.extend(field_comments[:5])
+        # Always include the table name itself (English CamelCase is useful for FIBO search)
+        comment_parts.append(table_registry.table_name)
+        keywords = ' '.join(comment_parts)
+        logger.debug(f"Keywords for {table_registry.table_name}: {keywords[:120]}")
+
+        # Extract field names for property-domain reverse lookup (Stage 3)
+        field_names = [f.get('field_name', '') for f in parsed_fields if f.get('field_name')]
+
+        candidates = await search_candidates(keywords, limit=settings.CANDIDATE_LIMIT, field_names=field_names)
 
         if not candidates:
             logger.warning(f"No candidates found for table: {table_registry.table_name}")
@@ -99,7 +130,7 @@ async def process_single_table(job_id: int, table_registry_id: int) -> Dict[str,
         prompt = build_mapping_prompt(
             database_name=table_registry.database_name,
             table_name=table_registry.table_name,
-            table_comment=table_registry.raw_ddl[:DDL_COMMENT_PREVIEW_LEN],
+            table_comment=table_registry.table_comment or '',
             fields=table_registry.parsed_fields,
             candidate_classes=candidates
         )
@@ -250,10 +281,64 @@ def parse_mapping_response(response_text: str) -> Optional[Dict[str, Any]]:
         return None
 
 
+def _translate_reason_to_zh(reason_en: str) -> str:
+    """Translate English mapping reason to Chinese."""
+    if not reason_en:
+        return ""
+    # Common translation patterns
+    translations = {
+        "represents": "表示",
+        "table": "表",
+        "maps to": "映射到",
+        "corresponds to": "对应于",
+        "is a": "是一个",
+        "relates to": "与...相关",
+        "matches": "匹配",
+        "payment": "支付",
+        "obligation": "义务",
+        "contract": "合同",
+        "agreement": "协议",
+        "account": "账户",
+        "currency": "货币",
+        "guarantee": "担保",
+        "settlement": "结算",
+        "interest": "利息",
+        "rate": "利率",
+        "financial": "金融",
+        "instrument": "工具",
+        "cashflow": "现金流",
+        "debt": "债务",
+        "receivable": "应收款",
+        "payable": "应付款",
+        "invoice": "发票",
+        "bill": "单据",
+        "high confidence": "高置信度",
+        "medium confidence": "中置信度",
+        "low confidence": "低置信度",
+        "primary key": "主键",
+        "foreign key": "外键",
+        "technical field": "技术字段",
+        "business identifier": "业务标识符",
+        "not mapped": "未映射",
+        "no corresponding": "无对应",
+        "property": "属性",
+        "class": "类",
+        "entity": "实体",
+    }
+    reason_zh = reason_en
+    for en, zh in translations.items():
+        reason_zh = reason_zh.replace(en, zh)
+    return reason_zh
+
+
 async def save_mapping_result(db, job_id: int, table_registry: TableRegistry,
                                mapping_result: Dict, model_used: str, 
                                tokens: int, latency_ms: int, is_fallback: bool = False):
     """Save mapping result to database."""
+    # Translate mapping reason to Chinese
+    reason_en = mapping_result.get('mapping_reason', '')
+    reason_zh = _translate_reason_to_zh(reason_en)
+    
     # Create table mapping
     table_mapping = TableMapping(
         job_id=job_id,
@@ -261,7 +346,7 @@ async def save_mapping_result(db, job_id: int, table_registry: TableRegistry,
         table_name=table_registry.table_name,
         fibo_class_uri=mapping_result.get('fibo_class_uri'),
         confidence_level=mapping_result.get('confidence_level', 'UNRESOLVED'),
-        mapping_reason=mapping_result.get('mapping_reason', ''),
+        mapping_reason=reason_zh or reason_en,
         mapping_status='mapped' if mapping_result.get('mappable') else 'unmappable',
         review_status='pending',
         model_used=model_used,
@@ -269,14 +354,22 @@ async def save_mapping_result(db, job_id: int, table_registry: TableRegistry,
     db.add(table_mapping)
     await db.flush()  # Get ID
     
-    # Create field mappings
+    # Create field mappings (deduplicate by field_name to avoid unique constraint violation)
+    seen_fields = set()
     for field_mapping in mapping_result.get('field_mappings', []):
+        field_name = field_mapping.get('field_name', '')
+        if not field_name or field_name in seen_fields:
+            continue
+        seen_fields.add(field_name)
+        # Translate field mapping reason to Chinese
+        field_reason_en = field_mapping.get('mapping_reason', '')
+        field_reason_zh = _translate_reason_to_zh(field_reason_en)
         field_map = FieldMapping(
             table_mapping_id=table_mapping.id,
-            field_name=field_mapping['field_name'],
+            field_name=field_name,
             fibo_property_uri=field_mapping.get('fibo_property_uri'),
             confidence_level=field_mapping.get('confidence_level', 'UNRESOLVED'),
-            mapping_reason=field_mapping.get('mapping_reason', ''),
+            mapping_reason=field_reason_zh or field_reason_en,
         )
         db.add(field_map)
     

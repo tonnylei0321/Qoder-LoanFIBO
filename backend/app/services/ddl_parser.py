@@ -82,14 +82,26 @@ async def parse_ddl_node(state: PipelineState) -> PipelineState:
                                 TableRegistry.table_name == table_info['table_name']
                             )
                         )
-                        if existing.scalar_one_or_none():
-                            logger.debug(f"Table already exists: {table_info['database_name']}.{table_info['table_name']}")
+                        existing_record = existing.scalar_one_or_none()
+                        if existing_record:
+                            # UPDATE: refresh table_comment and parsed_fields if they were missing
+                            if not existing_record.table_comment and table_info.get('table_comment'):
+                                existing_record.table_comment = table_info['table_comment']
+                            if existing_record.parsed_fields:
+                                # Re-check if field comments are missing - update if DDL has them
+                                has_comments = any(f.get('comment') for f in existing_record.parsed_fields)
+                                new_has_comments = any(f.get('comment') for f in table_info.get('parsed_fields', []))
+                                if not has_comments and new_has_comments:
+                                    existing_record.parsed_fields = table_info['parsed_fields']
+                            await db.commit()
+                            logger.debug(f"Table already exists (refreshed comments): {table_info['database_name']}.{table_info['table_name']}")
                             continue
                         
                         # Insert into database
                         table_registry = TableRegistry(
                             database_name=table_info['database_name'],
                             table_name=table_info['table_name'],
+                            table_comment=table_info.get('table_comment'),  # Save table-level comment
                             raw_ddl=table_info['raw_ddl'],
                             parsed_fields=table_info['parsed_fields'],
                             mapping_status='pending'
@@ -307,14 +319,21 @@ def parse_column_def(column_def: exp.ColumnDef) -> Dict[str, Any]:
     comment = None
     
     for constraint in column_def.constraints:
-        if isinstance(constraint, exp.NotNullColumnConstraint):
+        # sqlglot wraps constraint details in constraint.kind
+        constraint_kind = constraint.kind if hasattr(constraint, 'kind') else constraint
+        if isinstance(constraint_kind, exp.NotNullColumnConstraint):
             is_nullable = False
-        elif isinstance(constraint, exp.PrimaryKeyColumnConstraint):
+        elif isinstance(constraint_kind, exp.PrimaryKeyColumnConstraint):
             is_primary_key = True
-        elif isinstance(constraint, exp.DefaultColumnConstraint):
-            default_value = str(constraint.expression) if constraint.expression else None
-        elif isinstance(constraint, exp.CommentColumnConstraint):
-            comment = constraint.expression.this if constraint.expression else None
+        elif isinstance(constraint_kind, exp.DefaultColumnConstraint):
+            default_value = str(constraint_kind.this) if constraint_kind.this else None
+        elif isinstance(constraint_kind, exp.CommentColumnConstraint):
+            # Extract the string value from the comment expression
+            comment_expr = constraint_kind.this
+            if comment_expr is not None:
+                raw = str(comment_expr)
+                # Strip surrounding quotes if present
+                comment = raw.strip("'\"")
     
     return {
         'field_name': field_name,

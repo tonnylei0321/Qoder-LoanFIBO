@@ -1,4 +1,4 @@
-把"""
+"""
 Pipeline Orchestrator - LangGraph Workflow for DDL-FIBO Mapping
 
 This module defines the LangGraph state machine that orchestrates the entire mapping pipeline:
@@ -100,13 +100,13 @@ class PipelineOrchestrator:
         
         # Add nodes (imported from other modules)
         from backend.app.services.ddl_parser import parse_ddl_node
-        from backend.app.services.ttl_indexer import index_ttl_node
+        from backend.app.services.fibo_indexer import index_fibo_node  # FIBO 2025Q4
         from backend.app.services.candidate_retriever import retrieve_candidates_node
         from backend.app.services.mapping_llm import mapping_llm_node, revision_node
         from backend.app.services.critic_agent import critic_node, check_revision_node
-        
+
         workflow.add_node("parse_ddl", parse_ddl_node)
-        workflow.add_node("index_ttl", index_ttl_node)
+        workflow.add_node("index_ttl", index_fibo_node)  # renamed import, same node name
         workflow.add_node("fetch_batch", fetch_batch_node)
         workflow.add_node("retrieve_candidates", retrieve_candidates_node)
         workflow.add_node("mapping_llm", mapping_llm_node)
@@ -165,7 +165,11 @@ class PipelineOrchestrator:
         logger.info(f"Starting pipeline execution for job_id={initial_state['job_id']}")
         
         try:
-            result = await self.compiled_graph.ainvoke(initial_state)
+            # Increase recursion limit for large batches
+            result = await self.compiled_graph.ainvoke(
+                initial_state,
+                config={"recursion_limit": 200}
+            )
             logger.info(f"Pipeline completed for job_id={initial_state['job_id']}")
             return result
         except Exception as e:

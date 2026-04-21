@@ -85,20 +85,45 @@ async def index_ttl_node(state: PipelineState) -> PipelineState:
                 
                 logger.info(f"Extracted {len(classes)} classes and {len(properties)} properties")
                 
+                # Deduplicate by URI (SPARQL may return multiple rows per class due to optional fields)
+                seen_uris = set()
+                unique_classes = []
+                for c in classes:
+                    uri = c['class_uri']
+                    if uri not in seen_uris:
+                        seen_uris.add(uri)
+                        unique_classes.append(c)
+                    else:
+                        # Merge: prefer non-None values
+                        existing_c = next(x for x in unique_classes if x['class_uri'] == uri)
+                        for k in ('label_zh', 'label_en', 'comment_zh', 'comment_en', 'parent_uri'):
+                            if not existing_c.get(k) and c.get(k):
+                                existing_c[k] = c[k]
+                
+                seen_prop_uris = set()
+                unique_props = []
+                for p in properties:
+                    uri = p['property_uri']
+                    if uri not in seen_prop_uris:
+                        seen_prop_uris.add(uri)
+                        unique_props.append(p)
+                
+                logger.info(f"After dedup: {len(unique_classes)} classes, {len(unique_props)} properties")
+                
                 # Insert classes
-                for class_info in classes:
+                for class_info in unique_classes:
                     await insert_class(db, class_info)
                 
                 # Insert properties
-                for prop_info in properties:
+                for prop_info in unique_props:
                     await insert_property(db, prop_info)
                 
                 # Update index meta
                 meta = OntologyIndexMeta(
                     file_name=ttl_file.name,
                     file_md5=file_md5,
-                    class_count=len(classes),
-                    property_count=len(properties),
+                    class_count=len(unique_classes),
+                    property_count=len(unique_props),
                     is_active=True
                 )
                 db.add(meta)
