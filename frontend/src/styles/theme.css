@@ -1,0 +1,369 @@
+/* LoanFIBO Design System - Modern Fintech Theme */
+
+:root {
+  /* Primary Colors - Deep Blue to Teal Gradient */
+  --primary-50: #e6f7ff;
+  --primary-100: #bae7ff;
+  --primary-200: #91d5ff;
+  --primary-300: #69c0ff;
+  --primary-400: #40a9ff;
+  --primary-500: #1890ff;
+  --primary-600: #096dd9;
+  --primary-700: #0050b3;
+  --primary-800: #003a8c;
+  --primary-900: #002766;
+
+  /* Accent Colors - Vibrant Cyan */
+  --accent-cyan: #00d4ff;
+  --accent-teal: #00b8d4;
+  --accent-mint: #00e5ff;
+  
+  /* Semantic Colors */
+  --success: #00c853;
+  --warning: #ffab00;
+  --danger: #ff1744;
+  --info: #00b0ff;
+
+  /* Glass Effect */
+  --glass-bg: rgba(255, 255, 255, 0.08);
+  --glass-border: rgba(255, 255, 255, 0.1);
+  --glass-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+
+  /* Typography */
+  --font-display: 'Space Grotesk', -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-body: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-mono: 'JetBrains Mono', 'Fira Code', monospace;
+
+  /* Spacing */
+  --space-xs: 4px;
+  --space-sm: 8px;
+  --space-md: 16px;
+  --space-lg: 24px;
+  --space-xl: 32px;
+  --space-2xl: 48px;
+
+  /* Border Radius */
+  --radius-sm: 6px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --radius-xl: 24px;
+  --radius-full: 9999px;
+
+  /* Transitions */
+  --transition-fast: 150ms ease;
+  --transition-normal: 250ms ease;
+  --transition-slow: 350ms ease;
+}
+
+/* Dark Theme (Default) */
+[data-theme="dark"] {
+  --bg-primary: #0a0f1c;
+  --bg-secondary: #111827;
+  --bg-tertiary: #1f2937;
+  --bg-elevated: #243447;
+  
+  --text-primary: #ffffff;
+  --text-secondary: #9ca3af;
+  --text-tertiary: #6b7280;
+  --text-muted: #4b5563;
+  
+  --border-color: rgba(255, 255, 255, 0.1);
+  --divider-color: rgba(255, 255, 255, 0.06);
+  
+  --sidebar-bg: linear-gradient(180deg, #0f172a 0%, #1e293b 100%);
+  --header-bg: rgba(15, 23, 42, 0.8);
+  --card-bg: rgba(30, 41, 59, 0.6);
+  
+  --gradient-primary: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  --gradient-accent: linear-gradient(135deg, #00d4ff 0%, #00b8d4 100%);
+  --gradient-glow: radial-gradient(ellipse at top, rgba(102, 126, 234, 0.15) 0%, transparent 50%);
+}
+
+/* Light Theme */
+[data-theme="light"] {
+  --bg-primary: #fafafa;
+  --bg-secondary: #ffffff;
+  --bg-tertiary: #f3f4f6;
+  --bg-elevated: #e5e7eb;
+  
+  --text-primary: #111827;
+  --text-secondary: #4b5563;
+  --text-tertiary: #6b7280;
+  --text-muted: #9ca3af;
+
+  /* 信贷分析页面专用语义 token */
+  --page-title-color: #111827;
+  --page-desc-color: #6b7280;
+  --card-title-color: #4b5563;
+  --card-date-color: #6b7280;
+  --card-bg-subtle: rgba(0, 0, 0, 0.02);
+  --card-border: rgba(0, 0, 0, 0.08);
+  --section-bg: rgba(255, 255, 255, 0.9);
+  --table-header-bg: rgba(0, 0, 0, 0.02);
+  --table-header-color: #4b5563;
+  --table-cell-color: #374151;
+  --table-row-hover: rgba(102, 126, 234, 0.05);
+  --table-border: rgba(0, 0, 0, 0.06);
+  --ind-name-color: #111827;
+  --ind-icon-color: #d1d5db;
+  --threshold-color: #6b7280;
+  --text-muted-cell: #9ca3af;
+  --score-number-color: #111827;
+  --score-label-color: #6b7280;
+  --risk-label-color: #6b7280;
+  --stat-label-color: #6b7280;
+  --suggestion-text-color: #374151;
+  --dim-tab-color: #6b7280;
+  --dim-tab-hover-bg: rgba(0, 0, 0, 0.04);
+  --dim-tab-hover-color: #374151;
+  --input-bg: rgba(0, 0, 0, 0.03);
+  --input-border: rgba(0, 0, 0, 0.12);
+  --input-text-color: #111827;
+  --meta-item-color: #6b7280;
+  --company-name-color: #111827;
+  --date-label-color: #6b7280;
+  --empty-color: #9ca3af;
+  --fibo-icon-color: #d1d5db;
+  
+  --border-color: rgba(0, 0, 0, 0.08);
+  --divider-color: rgba(0, 0, 0, 0.04);
+  
+  --sidebar-bg: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
+  --header-bg: rgba(255, 255, 255, 0.9);
+  --card-bg: rgba(255, 255, 255, 0.8);
+  
+  --gradient-primary: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  --gradient-accent: linear-gradient(135deg, #00d4ff 0%, #00b8d4 100%);
+  --gradient-glow: radial-gradient(ellipse at top, rgba(102, 126, 234, 0.08) 0%, transparent 50%);
+
+  --glass-bg: rgba(255, 255, 255, 0.8);
+  --glass-border: rgba(0, 0, 0, 0.06);
+  --glass-shadow: 0 4px 24px rgba(0, 0, 0, 0.08);
+}
+
+/* Dark Theme 补充语义 token */
+[data-theme="dark"] {
+  --page-title-color: #f1f5f9;
+  --page-desc-color: #64748b;
+  --card-title-color: #94a3b8;
+  --card-date-color: #475569;
+  --card-bg-subtle: rgba(255, 255, 255, 0.03);
+  --card-border: rgba(148, 163, 184, 0.12);
+  --section-bg: rgba(255, 255, 255, 0.03);
+  --table-header-bg: rgba(255, 255, 255, 0.03);
+  --table-header-color: #64748b;
+  --table-cell-color: #cbd5e1;
+  --table-row-hover: rgba(102, 126, 234, 0.06);
+  --table-border: rgba(148, 163, 184, 0.06);
+  --ind-name-color: #e2e8f0;
+  --ind-icon-color: #334155;
+  --threshold-color: #475569;
+  --text-muted-cell: #334155;
+  --score-number-color: #f1f5f9;
+  --score-label-color: #64748b;
+  --risk-label-color: #64748b;
+  --stat-label-color: #64748b;
+  --suggestion-text-color: #94a3b8;
+  --dim-tab-color: #64748b;
+  --dim-tab-hover-bg: rgba(255, 255, 255, 0.05);
+  --dim-tab-hover-color: #94a3b8;
+  --input-bg: rgba(255, 255, 255, 0.05);
+  --input-border: rgba(148, 163, 184, 0.2);
+  --input-text-color: #e2e8f0;
+  --meta-item-color: #94a3b8;
+  --company-name-color: #f1f5f9;
+  --date-label-color: #94a3b8;
+  --empty-color: #1e293b;
+  --fibo-icon-color: #334155;
+}
+
+/* Global Styles */
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html {
+  font-size: 16px;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+body {
+  font-family: var(--font-body);
+  background-color: var(--bg-primary);
+  color: var(--text-primary);
+  line-height: 1.6;
+  transition: background-color var(--transition-normal), color var(--transition-normal);
+}
+
+/* Typography */
+h1, h2, h3, h4, h5, h6 {
+  font-family: var(--font-display);
+  font-weight: 600;
+  line-height: 1.2;
+}
+
+h1 { font-size: 2.5rem; }
+h2 { font-size: 2rem; }
+h3 { font-size: 1.5rem; }
+h4 { font-size: 1.25rem; }
+
+/* Glass Card */
+.glass-card {
+  background: var(--card-bg);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--glass-shadow);
+}
+
+/* Gradient Text */
+.gradient-text {
+  background: var(--gradient-primary);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+/* Glow Effect */
+.glow {
+  box-shadow: 0 0 20px rgba(0, 212, 255, 0.3), 0 0 40px rgba(0, 212, 255, 0.1);
+}
+
+/* Button Styles */
+.btn-primary {
+  background: var(--gradient-primary);
+  border: none;
+  color: white;
+  padding: 12px 24px;
+  border-radius: var(--radius-md);
+  font-weight: 500;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  position: relative;
+  overflow: hidden;
+}
+
+.btn-primary:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 25px rgba(102, 126, 234, 0.4);
+}
+
+.btn-primary:active {
+  transform: translateY(0);
+}
+
+/* Status Badges */
+.status-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 12px;
+  border-radius: var(--radius-full);
+  font-size: 0.75rem;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.status-badge::before {
+  content: '';
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+}
+
+.status-success {
+  background: rgba(0, 200, 83, 0.15);
+  color: var(--success);
+}
+
+.status-success::before {
+  background: var(--success);
+  box-shadow: 0 0 8px var(--success);
+}
+
+.status-warning {
+  background: rgba(255, 171, 0, 0.15);
+  color: var(--warning);
+}
+
+.status-warning::before {
+  background: var(--warning);
+  box-shadow: 0 0 8px var(--warning);
+}
+
+.status-danger {
+  background: rgba(255, 23, 68, 0.15);
+  color: var(--danger);
+}
+
+.status-danger::before {
+  background: var(--danger);
+  box-shadow: 0 0 8px var(--danger);
+}
+
+/* Animations */
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes slideIn {
+  from { transform: translateX(-20px); opacity: 0; }
+  to { transform: translateX(0); opacity: 1; }
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+@keyframes glow {
+  0%, 100% { box-shadow: 0 0 20px rgba(0, 212, 255, 0.3); }
+  50% { box-shadow: 0 0 30px rgba(0, 212, 255, 0.5); }
+}
+
+.animate-fade-in {
+  animation: fadeIn 0.5s ease forwards;
+}
+
+.animate-slide-in {
+  animation: slideIn 0.4s ease forwards;
+}
+
+.animate-pulse {
+  animation: pulse 2s ease-in-out infinite;
+}
+
+.animate-glow {
+  animation: glow 2s ease-in-out infinite;
+}
+
+/* Scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--bg-secondary);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--text-muted);
+  border-radius: var(--radius-full);
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--text-secondary);
+}
+
+/* Selection */
+::selection {
+  background: var(--primary-500);
+  color: white;
+}

@@ -14,6 +14,9 @@ import NewJobView from '@/views/jobs/NewJobView.vue'
 import ReviewsView from '@/views/reviews/ReviewsView.vue'
 import UsersView from '@/views/users/UsersView.vue'
 import SettingsView from '@/views/settings/SettingsView.vue'
+import PreLoanView from '@/views/loan-analysis/PreLoanView.vue'
+import PostLoanView from '@/views/loan-analysis/PostLoanView.vue'
+import SupplyChainView from '@/views/loan-analysis/SupplyChainView.vue'
 
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
@@ -74,6 +77,21 @@ const router = createRouter({
           path: 'settings',
           name: 'settings',
           component: SettingsView,
+        },
+        {
+          path: 'loan-analysis/pre-loan',
+          name: 'pre-loan',
+          component: PreLoanView,
+        },
+        {
+          path: 'loan-analysis/post-loan',
+          name: 'post-loan',
+          component: PostLoanView,
+        },
+        {
+          path: 'loan-analysis/supply-chain',
+          name: 'supply-chain',
+          component: SupplyChainView,
         },
       ],
     },

@@ -4,7 +4,11 @@ import type { Job, JobCreateForm, PaginatedData, PaginationParams, PipelineStats
 
 export const jobsApi = {
   getJobs: (params?: PaginationParams & { status?: string }): Promise<PaginatedData<Job>> => {
-    return request.get('/jobs', { params })
+    const apiParams: Record<string, any> = {}
+    if (params?.page) apiParams.page = params.page
+    if (params?.pageSize) apiParams.page_size = params.pageSize
+    if (params?.status) apiParams.status = params.status
+    return request.get('/jobs', { params: apiParams })
   },
 
   getJob: (id: number): Promise<Job> => {
