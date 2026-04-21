@@ -1,6 +1,7 @@
 """DSL执行引擎单元测试"""
 import pytest
-from backend.app.services.rules.dsl_executor import DSLExecutor, SecurityError
+from backend.app.services.rules.dsl_executor import DSLExecutor
+from backend.app.services.security_error import SecurityError
 from backend.app.services.rules.dsl_parser import DSLFormula
 
 

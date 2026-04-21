@@ -1,6 +1,7 @@
 """SQL生成器单元测试"""
 import pytest
-from backend.app.services.query.sql_generator import SQLGenerator, SecurityError
+from backend.app.services.query.sql_generator import SQLGenerator
+from backend.app.services.security_error import SecurityError
 from backend.app.services.query.semantic_mapping import SemanticMapping, JoinDefinition, TableMapping
 
 

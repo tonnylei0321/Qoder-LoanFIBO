@@ -1,4 +1,5 @@
 """编译调度器 - 优先级队列+异步执行"""
+import asyncio
 import heapq
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
@@ -51,13 +52,15 @@ class CompileScheduler:
         return job
 
     async def submit(self, job: CompileJob) -> Any:
-        """提交并执行编译任务"""
+        """提交并执行编译任务（非阻塞）"""
         job.status = "running"
         await self.cache.set_compile_status(job.tenant_id, "compiling")
 
         try:
-            result = self.compiler.compile_sync(
-                job.tenant_id, l2_rules=job.l2_rules
+            result = await asyncio.to_thread(
+                self.compiler.compile_sync,
+                job.tenant_id,
+                job.l2_rules,
             )
             if result.success:
                 job.status = "completed"

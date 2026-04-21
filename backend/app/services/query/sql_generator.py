@@ -4,11 +4,7 @@ from typing import Any, Dict, List, Optional, Tuple
 from loguru import logger
 
 from backend.app.services.query.semantic_mapping import SemanticMapping, TableMapping
-
-
-class SecurityError(Exception):
-    """SQL安全异常"""
-    pass
+from backend.app.services.security_error import SecurityError
 
 
 class SQLGenerator:
@@ -84,14 +80,17 @@ class SQLGenerator:
         return f'"{escaped}"'
 
     def _validate_sql_safety(self, sql: str):
+        """校验SQL安全性，使用词边界匹配避免误命中"""
+        import re as _re
         dangerous_keywords = [
             'INSERT', 'UPDATE', 'DELETE', 'DROP',
             'TRUNCATE', 'ALTER', 'CREATE', 'GRANT',
-            'EXECUTE', 'EXEC', 'XP_', 'LOAD_'
+            'EXECUTE', 'EXEC', 'XP_', 'LOAD_',
         ]
         upper_sql = sql.upper()
         for keyword in dangerous_keywords:
-            if keyword in upper_sql:
+            # 使用词边界匹配，避免 "EXECUTION" 误命中 "EXECUTE"
+            if _re.search(rf'\b{keyword}\b', upper_sql):
                 raise SecurityError(f"SQL包含危险操作: {keyword}")
 
         stripped = sql.strip().rstrip(';')

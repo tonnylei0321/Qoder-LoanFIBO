@@ -139,17 +139,10 @@ class RuleCompiler:
     def _merge_rules(
         self, l0_rules: List[Dict], l2_rules: List[Dict]
     ) -> List[Dict]:
-        """合并 L0/L1 和 L2 规则"""
-        merged = list(l0_rules)
-        # L2 rules override L0/L1 with same intent_id
-        existing_intents = {r.get("intent_id") for r in merged if r.get("intent_id")}
-        for rule in l2_rules:
-            if rule.get("intent_id") in existing_intents:
-                # Mark L0 rule as overridden
-                for existing in merged:
-                    if existing.get("intent_id") == rule.get("intent_id"):
-                        existing["_overridden"] = True
-            merged.append(rule)
+        """合并 L0/L1 和 L2 规则，并解决冲突
 
-        # Filter out overridden L0 rules
-        return [r for r in merged if not r.get("_overridden")]
+        委托 ConflictResolver.resolve 统一处理 intent_id 去重和优先级选择，
+        避免与此处重复的合并逻辑。
+        """
+        all_rules = list(l0_rules) + list(l2_rules)
+        return self.conflict_resolver.resolve(all_rules)

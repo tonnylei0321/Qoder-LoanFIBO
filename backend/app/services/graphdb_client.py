@@ -1,8 +1,21 @@
 """GraphDB双模式客户端 - 异步(httpx)/同步(httpx同步)"""
+import re
 from typing import Any, Dict, List, Optional
 
 import httpx
 from loguru import logger
+
+# SPARQL安全字符白名单：仅允许字母、数字、下划线、连字符
+_SPARQL_SAFE_PATTERN = re.compile(r'^[a-zA-Z0-9_\-\u4e00-\u9fff]+$')
+
+
+def _validate_sparql_literal(value: str, param_name: str) -> str:
+    """校验SPARQL字面量安全性，防止注入"""
+    if not _SPARQL_SAFE_PATTERN.match(value):
+        raise ValueError(
+            f"{param_name} 包含非法字符，仅允许字母/数字/下划线/连字符: {value!r}"
+        )
+    return value
 
 
 class GraphDBClient:
@@ -46,9 +59,10 @@ class GraphDBClient:
         适用场景：FastAPI查询引擎、API层调用
         """
         cache_hint = "pragma: cache" if use_cache else "pragma: no-cache"
-        industry_filter = (
-            f'?rule loanfibo:industry "{industry}" .' if industry else ""
-        )
+        industry_filter = ""
+        if industry:
+            safe_industry = _validate_sparql_literal(industry, "industry")
+            industry_filter = f'?rule loanfibo:industry "{safe_industry}" .'
 
         sparql = f"""
         {cache_hint}
@@ -93,9 +107,10 @@ class GraphDBClient:
         不使用 async/await，纯同步调用
         """
         cache_hint = "pragma: cache" if use_cache else "pragma: no-cache"
-        industry_filter = (
-            f'?rule loanfibo:industry "{industry}" .' if industry else ""
-        )
+        industry_filter = ""
+        if industry:
+            safe_industry = _validate_sparql_literal(industry, "industry")
+            industry_filter = f'?rule loanfibo:industry "{safe_industry}" .'
 
         sparql = f"""
         {cache_hint}

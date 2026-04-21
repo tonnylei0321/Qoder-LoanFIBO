@@ -92,8 +92,42 @@ class DSLParser:
         raise ValueError(f"无法解析公式: {formula}")
 
     def _split_by_connector(self, formula: str, connector: str) -> List[str]:
+        """引号感知的连接词拆分
+
+        不会拆分引号内包含 AND/OR 的内容，
+        如 name = "AND VALUE" 不会被错误拆分。
+        """
         pattern = f" {connector} "
-        return formula.split(pattern)
+        parts = []
+        current = []
+        in_quote = False
+        quote_char = None
+        i = 0
+        while i < len(formula):
+            # 检查是否进入/退出引号
+            if formula[i] in ('"', "'") and (
+                not in_quote or formula[i] == quote_char
+            ):
+                if in_quote:
+                    in_quote = False
+                    quote_char = None
+                else:
+                    in_quote = True
+                    quote_char = formula[i]
+                current.append(formula[i])
+                i += 1
+                continue
+            # 只在引号外检查连接词
+            if not in_quote and formula[i:i + len(pattern)] == pattern:
+                parts.append("".join(current))
+                current = []
+                i += len(pattern)
+                continue
+            current.append(formula[i])
+            i += 1
+        if current:
+            parts.append("".join(current))
+        return parts
 
     def _parse_value(self, value: str) -> Any:
         value = value.strip().strip("'\"")

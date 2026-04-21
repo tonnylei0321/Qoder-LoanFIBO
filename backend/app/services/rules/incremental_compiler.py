@@ -1,4 +1,5 @@
 """增量编译器 - 仅重编译变更部分"""
+import asyncio
 from typing import Any, Dict, List, Optional
 
 from loguru import logger
@@ -38,8 +39,10 @@ class IncrementalCompiler:
         # 合并：变更规则覆盖同 intent_id 的旧规则
         merged = self._merge_with_changes(existing_rules, changed_rules)
 
-        # 调用编译器同步编译
-        result = self.compiler.compile_sync(tenant_id, l2_rules=merged)
+        # 调用编译器同步编译（非阻塞）
+        result = await asyncio.to_thread(
+            self.compiler.compile_sync, tenant_id, merged
+        )
 
         if result.success:
             import json

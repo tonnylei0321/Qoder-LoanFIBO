@@ -1,6 +1,6 @@
 """L2 rule model for rules engine."""
 
-from datetime import datetime
+from datetime import datetime, timezone
 
 from sqlalchemy import String, Integer, Boolean, DateTime, JSON
 from sqlalchemy.orm import Mapped, mapped_column
@@ -20,7 +20,7 @@ class L2Rule(Base):
     definition: Mapped[dict] = mapped_column(JSON, nullable=False)
     priority: Mapped[int] = mapped_column(Integer, default=0)
     enabled: Mapped[bool] = mapped_column(Boolean, default=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(timezone.utc))
     updated_at: Mapped[datetime] = mapped_column(
-        DateTime, default=datetime.utcnow, onupdate=datetime.utcnow
+        DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc)
     )

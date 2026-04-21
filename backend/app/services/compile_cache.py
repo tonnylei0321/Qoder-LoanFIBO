@@ -79,6 +79,5 @@ class CompileCache:
             self._status_key(tenant_id),
             self._stale_key(tenant_id),
         ]
-        for key in keys:
-            await self.redis.delete(key)
+        await self.redis.delete(*keys)
         return True

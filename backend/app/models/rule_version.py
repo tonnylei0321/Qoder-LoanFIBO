@@ -1,6 +1,6 @@
 """Rule version model for rules engine."""
 
-from datetime import datetime
+from datetime import datetime, timezone
 
 from sqlalchemy import String, Integer, DateTime, Text
 from sqlalchemy.orm import Mapped, mapped_column
@@ -18,5 +18,5 @@ class RuleVersion(Base):
     version: Mapped[str] = mapped_column(String(32), nullable=False)
     rule_count: Mapped[int] = mapped_column(Integer, default=0)
     compile_time_ms: Mapped[int] = mapped_column(Integer, default=0)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(timezone.utc))
     config_snapshot: Mapped[str] = mapped_column(Text, nullable=True)

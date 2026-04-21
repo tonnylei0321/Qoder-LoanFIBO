@@ -4,11 +4,7 @@ from typing import Any, Dict, Optional
 from loguru import logger
 
 from backend.app.services.rules.dsl_parser import DSLFormula
-
-
-class SecurityError(Exception):
-    """执行安全异常"""
-    pass
+from backend.app.services.security_error import SecurityError
 
 
 class DSLExecutor:
