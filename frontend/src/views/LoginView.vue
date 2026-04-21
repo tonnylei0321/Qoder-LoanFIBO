@@ -49,6 +49,7 @@
                 placeholder="用户名"
                 size="large"
                 class="custom-input"
+                data-testid="login-username"
               />
             </div>
           </el-form-item>
@@ -63,6 +64,7 @@
                 size="large"
                 class="custom-input"
                 show-password
+                data-testid="login-password"
               />
             </div>
           </el-form-item>
@@ -79,6 +81,7 @@
               :loading="loading"
               @click="handleLogin"
               class="login-btn"
+              data-testid="login-submit"
             >
               <span v-if="!loading">登 录</span>
               <span v-else>登录中...</span>

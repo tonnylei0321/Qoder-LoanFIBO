@@ -7,11 +7,11 @@
         <p class="subtitle">FIBO 本体映射智能分析平台</p>
       </div>
       <div class="header-actions">
-        <el-button type="primary" class="btn-glow" @click="showNewJobDialog = true">
+        <el-button type="primary" class="btn-glow" data-testid="btn-new-job" @click="showNewJobDialog = true">
           <el-icon><Plus /></el-icon>
           新建对齐任务
         </el-button>
-        <el-button class="btn-ghost" @click="refreshStats">
+        <el-button class="btn-ghost" data-testid="btn-refresh" @click="refreshStats">
           <el-icon><Refresh /></el-icon>
           刷新统计
         </el-button>
@@ -57,7 +57,7 @@
 
     <!-- Stats Cards -->
     <div class="stats-grid">
-      <div class="stat-card-glass">
+      <div class="stat-card-glass" data-testid="stat-total-tables">
         <div class="stat-icon">
           <el-icon><Grid /></el-icon>
         </div>
