@@ -20,6 +20,15 @@ import SupplyChainView from '@/views/loan-analysis/SupplyChainView.vue'
 import NLQQueryView from '@/views/rules/NLQQueryView.vue'
 import RulesManagerView from '@/views/rules/RulesManagerView.vue'
 import CompileStatusView from '@/views/rules/CompileStatusView.vue'
+import GraphExplorerView from '@/views/sync/GraphExplorerView.vue'
+import InstanceManagerView from '@/views/sync/InstanceManagerView.vue'
+import VersionManagerView from '@/views/sync/VersionManagerView.vue'
+import SyncTaskView from '@/views/sync/SyncTaskView.vue'
+import OrgManagerView from '@/views/org/OrgManagerView.vue'
+import AuthScopeView from '@/views/org/AuthScopeView.vue'
+import OrgManageView from '@/views/agent/OrgManage.vue'
+import AgentStatusView from '@/views/agent/AgentStatus.vue'
+import AuditVersionView from '@/views/agent/AuditVersion.vue'
 
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
@@ -110,6 +119,54 @@ const router = createRouter({
           path: 'rules/compile-status',
           name: 'compile-status',
           component: CompileStatusView,
+        },
+        {
+          path: 'sync/graph-explorer',
+          name: 'graph-explorer',
+          component: GraphExplorerView,
+        },
+        {
+          path: 'sync/instances',
+          name: 'instances',
+          component: InstanceManagerView,
+        },
+        {
+          path: 'sync/versions',
+          name: 'versions',
+          component: VersionManagerView,
+        },
+        {
+          path: 'sync/tasks',
+          name: 'sync-tasks',
+          component: SyncTaskView,
+        },
+        {
+          path: 'org/orgs',
+          name: 'org-manager',
+          component: OrgManagerView,
+        },
+        {
+          path: 'org/auth-scopes',
+          name: 'auth-scopes',
+          component: AuthScopeView,
+        },
+        // Agent 管理路由
+        {
+          path: 'agent/orgs',
+          name: 'agent-orgs',
+          component: OrgManageView,
+          meta: { requiresAdmin: true },
+        },
+        {
+          path: 'agent/status',
+          name: 'agent-status',
+          component: AgentStatusView,
+        },
+        {
+          path: 'agent/audit',
+          name: 'agent-audit',
+          component: AuditVersionView,
+          meta: { requiresAdmin: true },
         },
       ],
     },
