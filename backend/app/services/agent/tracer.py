@@ -148,24 +148,43 @@ class TracerService:
             for stream, msgs in messages:
                 for msg_id, data in msgs:
                     try:
-                        spans = json.loads(data.get("spans", "[]"))
+                        # Redis decode_responses=False 时 data 的 key/value 是 bytes
+                        def _get(d, key):
+                            val = d.get(key) or d.get(key.encode())
+                            if isinstance(val, bytes):
+                                val = val.decode()
+                            return val
+            
+                        spans_raw = _get(data, "spans")
+                        spans = json.loads(spans_raw) if spans_raw else []
+
+                        # asyncpg 需要 datetime 对象，不能传 str
+                        created_at_str = _get(data, "created_at")
+                        created_at_dt = None
+                        if created_at_str:
+                            try:
+                                from datetime import datetime as dt
+                                created_at_dt = dt.fromisoformat(created_at_str)
+                            except (ValueError, TypeError):
+                                created_at_dt = datetime.now(timezone.utc)
+
                         await db_session.execute(
                             text("""
                                 INSERT INTO agent_trace
                                 (trace_id, org_id, datasource, action, status, spans, duration_ms, created_at)
-                                VALUES (:trace_id, :org_id::uuid, :datasource, :action, :status,
-                                        :spans::jsonb, :duration_ms, :created_at::timestamptz)
+                                VALUES (:trace_id, CAST(:org_id AS uuid), :datasource, :action, :status,
+                                        CAST(:spans AS jsonb), :duration_ms, :created_at)
                                 ON CONFLICT (trace_id) DO NOTHING
                             """),
                             {
-                                "trace_id": data["trace_id"],
-                                "org_id": data["org_id"],
-                                "datasource": data["datasource"],
-                                "action": data["action"],
-                                "status": data["status"],
+                                "trace_id": _get(data, "trace_id"),
+                                "org_id": _get(data, "org_id"),
+                                "datasource": _get(data, "datasource"),
+                                "action": _get(data, "action"),
+                                "status": _get(data, "status"),
                                 "spans": json.dumps(spans),
-                                "duration_ms": int(data.get("duration_ms", 0)),
-                                "created_at": data["created_at"],
+                                "duration_ms": int(_get(data, "duration_ms") or 0),
+                                "created_at": created_at_dt,
                             },
                         )
                         count += 1

@@ -14,9 +14,9 @@ import json
 import logging
 from typing import Any
 
-from fastapi import WebSocket
+from fastapi import WebSocket, WebSocketDisconnect
 
-from backend.app.services.agent.credential import CredentialService, credential_service
+from backend.app.services.agent.credential import CredentialService
 from backend.app.services.agent.router import AgentConn, AgentRouter, get_router
 from backend.app.services.agent.task_queue import TaskQueue, get_task_queue
 from backend.app.services.agent.tracer import TracerService, get_tracer
@@ -37,7 +37,7 @@ class AgentWSHandler:
         task_queue: TaskQueue | None = None,
         tracer: TracerService | None = None,
     ):
-        self._cred_service = credential_service or credential_service
+        self._cred_service = credential_service
         self._router = router or get_router()
         self._task_queue = task_queue or get_task_queue()
         self._tracer = tracer or get_tracer()
@@ -82,7 +82,7 @@ class AgentWSHandler:
             return None
 
         await ws.send_json({
-            "type": "auth_ack",
+            "type": "auth_ok",
             "client_id": client_id,
         })
         return cred

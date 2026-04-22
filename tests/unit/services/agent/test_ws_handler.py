@@ -49,7 +49,7 @@ class TestHandleAuth:
 
     @pytest.mark.asyncio
     async def test_auth_success(self, handler, mock_credential_service):
-        """auth 成功应返回凭证对象并发送 auth_ack。"""
+        """auth 成功应返回凭证对象并发送 auth_ok。"""
         ws = AsyncMock()
         mock_cred = MagicMock()
         mock_cred.org_id = "org-uuid-1"
@@ -68,7 +68,7 @@ class TestHandleAuth:
         assert cred.org_id == "org-uuid-1"
         ws.send_json.assert_called_once()
         sent = ws.send_json.call_args[0][0]
-        assert sent["type"] == "auth_ack"
+        assert sent["type"] == "auth_ok"
 
     @pytest.mark.asyncio
     async def test_auth_failure(self, handler, mock_credential_service):

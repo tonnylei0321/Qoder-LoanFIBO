@@ -46,7 +46,9 @@ async def lifespan(app: FastAPI):
     tracer = init_tracer(redis_client=redis_client)
     task_queue = init_task_queue(router=agent_router, tracer=tracer)
     init_heartbeat_service(router=agent_router, redis_client=redis_client)
-    init_ws_handler(router=agent_router, task_queue=task_queue, tracer=tracer)
+    from backend.app.services.agent.credential import CredentialService
+    cred_service = CredentialService()
+    init_ws_handler(credential_service=cred_service, router=agent_router, task_queue=task_queue, tracer=tracer)
     logger.info("Agent services initialized")
 
     # Start heartbeat background task
@@ -77,15 +79,33 @@ async def lifespan(app: FastAPI):
                 logger.error(f"Offline alert check error: {e}")
             await asyncio.sleep(30)
 
+    async def trace_flush_loop():
+        """Trace Redis Stream → PG 刷盘 — 每 10 秒执行。"""
+        from backend.app.services.agent.tracer import get_tracer
+        from backend.app.database import async_session_factory
+        import asyncio
+        while True:
+            try:
+                tracer = get_tracer()
+                async with async_session_factory() as db:
+                    count = await tracer.flush_to_pg(db)
+                    if count > 0:
+                        logger.info(f"Trace flush: {count} records written to PG")
+            except Exception as e:
+                logger.error(f"Trace flush error: {e}")
+            await asyncio.sleep(10)
+
     import asyncio
     hb_task = asyncio.create_task(heartbeat_loop())
     alert_task = asyncio.create_task(offline_alert_loop())
+    trace_task = asyncio.create_task(trace_flush_loop())
 
     yield
 
     # Shutdown
     hb_task.cancel()
     alert_task.cancel()
+    trace_task.cancel()
     logger.info("Shutting down application")
     from backend.app.services.rules.aps_scheduler import stop_scheduler
     stop_scheduler()
