@@ -26,6 +26,10 @@ async def lifespan(app: FastAPI):
     from backend.app.services.rules.aps_scheduler import start_scheduler
     start_scheduler()
 
+    # Start indicator collection scheduler
+    from backend.app.services.indicator_collection import start_collection_scheduler
+    start_collection_scheduler()
+
     # Initialize agent services
     import redis.asyncio as aioredis
     from backend.app.services.agent.router import init_router
@@ -109,6 +113,8 @@ async def lifespan(app: FastAPI):
     logger.info("Shutting down application")
     from backend.app.services.rules.aps_scheduler import stop_scheduler
     stop_scheduler()
+    from backend.app.services.indicator_collection import stop_collection_scheduler
+    stop_collection_scheduler()
     if redis_client:
         await redis_client.close()
     await close_db()

@@ -190,4 +190,24 @@ export const loanAnalysisApi = {
     request.get(`/loan-analysis/companies/${companyId}/alerts`, {
       params: { scenario, status },
     }),
+
+  // Indicator History Trend
+  getIndicatorHistory: (
+    companyId: string,
+    indicatorId: string,
+    params?: { start_date?: string; end_date?: string; limit?: number },
+  ): Promise<IndicatorValue[]> =>
+    request.get(`/loan-analysis/companies/${companyId}/indicators/${indicatorId}/history`, { params }),
+
+  // Write indicator values with history (dual-write)
+  writeIndicatorValuesWithHistory: (
+    companyId: string,
+    calcDate: string,
+    values: Array<{ indicator_id: string; value?: number; value_prev?: number; data_quality?: string }>,
+    source: string = 'manual',
+  ): Promise<{ history_count: number; upserted_count: number; batch_id: string }> =>
+    request.post(`/loan-analysis/companies/${companyId}/values/history?source=${source}`, {
+      calc_date: calcDate,
+      values,
+    }),
 }

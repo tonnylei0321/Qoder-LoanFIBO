@@ -196,6 +196,8 @@ class AgentWSHandler:
                     msg_id = msg.get("msg_id", "")
                     data = msg.get("data", {})
                     await self._task_queue.handle_result(msg_id, data)
+                    # 对 query_indicator 结果做历史双写
+                    await self._write_indicator_history_if_needed(msg_id, data, org_id)
 
                 elif msg_type == "error":
                     msg_id = msg.get("msg_id", "")
@@ -219,6 +221,63 @@ class AgentWSHandler:
             if org_id and datasource:
                 self._router.remove_connection(org_id, datasource)
                 logger.info("路由表已清理: org=%s ds=%s", org_id, datasource)
+
+    async def _write_indicator_history_if_needed(
+        self, msg_id: str, data: dict, org_id: str
+    ) -> None:
+        """对 query_indicator 结果执行历史双写。
+
+        期望 Agent 返回的 data 格式：
+        {
+            "action": "query_indicator",
+            "company_id": "uuid",
+            "calc_date": "2026-04-20",
+            "values": [
+                {"indicator_id": "uuid", "value": 123.45, "value_prev": 100.0, "data_quality": "P0"},
+                ...
+            ]
+        }
+        """
+        if data.get("action") != "query_indicator":
+            return
+
+        values = data.get("values", [])
+        if not values:
+            return
+
+        company_id = data.get("company_id")
+        calc_date_str = data.get("calc_date")
+
+        if not company_id or not calc_date_str:
+            logger.warning("query_indicator result 缺少 company_id 或 calc_date: msg_id=%s", msg_id)
+            return
+
+        try:
+            from datetime import date as date_type
+            calc_date = date_type.fromisoformat(calc_date_str)
+        except (ValueError, TypeError):
+            logger.warning("query_indicator result calc_date 格式错误: %s", calc_date_str)
+            return
+
+        try:
+            from backend.app.database import async_session_factory
+            from backend.app.services.indicator_history import IndicatorHistoryWriter
+
+            async with async_session_factory() as db:
+                writer = IndicatorHistoryWriter(db)
+                result = await writer.write_values(
+                    company_id=company_id,
+                    calc_date=calc_date,
+                    values=values,
+                    source="agent",
+                )
+                await db.commit()
+                logger.info(
+                    "指标历史双写完成: org=%s msg_id=%s history=%d upsert=%d batch=%s",
+                    org_id, msg_id, result["history_count"], result["upserted_count"], result["batch_id"],
+                )
+        except Exception as e:
+            logger.error("指标历史双写失败: org=%s msg_id=%s err=%s", org_id, msg_id, e)
 
 
 # 全局单例

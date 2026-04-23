@@ -544,3 +544,30 @@ async def submit_task(
     )
 
     return {"code": 0, "data": result}
+
+
+# ---------------------------------------------------------------------------
+# 指标采集触发（手动/定时）
+# ---------------------------------------------------------------------------
+
+class CollectRequest(BaseModel):
+    org_id: str
+    datasource: str = "NCC"
+
+
+@router.post("/collect")
+async def trigger_collection(
+    req: CollectRequest | None = None,
+    admin: dict = Depends(get_current_admin),
+):
+    """手动触发指标采集（指定企业或全部在线代理）。"""
+    from backend.app.services.indicator_collection import IndicatorCollectionPipeline
+    pipeline = IndicatorCollectionPipeline()
+
+    if req and req.org_id:
+        result = await pipeline.collect_for_org(req.org_id, req.datasource)
+    else:
+        result = await pipeline.collect_all()
+
+    return {"code": 0, "data": result}
+

@@ -53,4 +53,9 @@ export const agentApi = {
   submitTask: (data: { org_id: string; datasource: string; action: string; payload: Record<string, unknown>; timeout_ms?: number }) => {
     return request.post('/agent/task', data)
   },
+
+  // 手动触发指标采集
+  triggerCollect: (data?: { org_id: string; datasource?: string }) => {
+    return request.post('/agent/collect', data || {})
+  },
 }
