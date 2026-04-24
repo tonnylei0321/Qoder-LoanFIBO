@@ -19,6 +19,10 @@ test.describe('Navigation', () => {
     { path: '/rules/nlq-query', title: /NLQ|查询/ },
     { path: '/rules/manager', title: /规则/ },
     { path: '/rules/compile-status', title: /编译|状态/ },
+    { path: '/sync/graph-explorer', title: /图谱|浏览/ },
+    { path: '/sync/instances', title: /实例/ },
+    { path: '/sync/versions', title: /版本/ },
+    { path: '/sync/tasks', title: /同步/ },
   ]
 
   for (const route of routes) {

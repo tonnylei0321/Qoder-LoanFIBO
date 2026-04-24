@@ -2,6 +2,7 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import type { User, LoginForm } from '@/types'
+import request from '@/api/request'
 
 export const useAuthStore = defineStore('auth', () => {
   // State
@@ -10,7 +11,26 @@ export const useAuthStore = defineStore('auth', () => {
 
   // Getters
   const isLoggedIn = computed(() => !!token.value)
-  const isAdmin = computed(() => user.value?.role === 'admin')
+  const isAdmin = computed(() => {
+    if (!user.value) return false
+    return user.value.roles?.some(r => r.code === 'admin') || false
+  })
+
+  /**
+   * menuCodes:
+   *  - null  → admin / no restriction, can see all menus
+   *  - string[] → the list of route names this user can access
+   */
+  const menuCodes = computed<string[] | null>(() => {
+    if (!user.value) return []
+    return user.value.menu_codes  // null = unrestricted (admin)
+  })
+
+  /** Returns true if the given routeName is accessible */
+  const canAccessMenu = (routeName: string): boolean => {
+    if (menuCodes.value === null) return true  // admin
+    return menuCodes.value.includes(routeName)
+  }
 
   // Actions
   const setToken = (newToken: string) => {
@@ -23,19 +43,17 @@ export const useAuthStore = defineStore('auth', () => {
   }
 
   const login = async (form: LoginForm): Promise<boolean> => {
-    // TODO: Call real API
-    // Mock login for now
-    if (form.username && form.password) {
-      setToken('mock_token_' + Date.now())
-      setUser({
-        id: 1,
+    try {
+      const res = await request.post<any, { token: string }>('/auth/login', {
         username: form.username,
-        role: 'admin',
-        createdAt: new Date().toISOString(),
+        password: form.password,
       })
+      setToken(res.token)
+      await fetchUserInfo()
       return true
+    } catch {
+      return false
     }
-    return false
   }
 
   const logout = () => {
@@ -45,14 +63,13 @@ export const useAuthStore = defineStore('auth', () => {
   }
 
   const fetchUserInfo = async () => {
-    // TODO: Call real API to get user info
-    if (token.value && !user.value) {
-      setUser({
-        id: 1,
-        username: 'admin',
-        role: 'admin',
-        createdAt: new Date().toISOString(),
-      })
+    if (!token.value) return
+    try {
+      const res = await request.get<any, User>('/auth/me')
+      setUser(res)
+    } catch {
+      // Token invalid — clear
+      logout()
     }
   }
 
@@ -61,6 +78,8 @@ export const useAuthStore = defineStore('auth', () => {
     user,
     isLoggedIn,
     isAdmin,
+    menuCodes,
+    canAccessMenu,
     setToken,
     setUser,
     login,

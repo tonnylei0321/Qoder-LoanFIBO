@@ -439,6 +439,90 @@ async def submit_review(
     return {"code": 0, "message": "审核完成", "data": {"review_status": mapping.review_status}}
 
 
+@router.get("/mappings/{table_mapping_id}")
+async def get_mapping_detail(
+    table_mapping_id: int,
+    db: AsyncSession = Depends(get_db),
+):
+    """Get detail for a single table mapping."""
+    from sqlalchemy import select
+    from backend.app.models.table_mapping import TableMapping, FieldMapping
+    from backend.app.models.table_registry import TableRegistry
+    from backend.app.models.ontology_index import OntologyClassIndex
+
+    result = await db.execute(
+        select(TableMapping, TableRegistry).join(
+            TableRegistry,
+            (TableMapping.database_name == TableRegistry.database_name) &
+            (TableMapping.table_name == TableRegistry.table_name)
+        ).where(
+            TableMapping.id == table_mapping_id,
+            TableMapping.is_deleted == False,
+        )
+    )
+    row = result.first()
+    if not row:
+        raise HTTPException(status_code=404, detail="Mapping not found")
+
+    m, r = row
+    # Fetch field mappings
+    fm_result = await db.execute(
+        select(FieldMapping).where(
+            FieldMapping.table_mapping_id == m.id,
+            FieldMapping.is_deleted == False,
+        )
+    )
+    field_mappings = fm_result.scalars().all()
+
+    # Get class label
+    class_label = ""
+    if m.fibo_class_uri:
+        cls_result = await db.execute(
+            select(OntologyClassIndex.label_zh, OntologyClassIndex.label_en).where(
+                OntologyClassIndex.class_uri == m.fibo_class_uri,
+                OntologyClassIndex.is_deleted == False,
+            )
+        )
+        cls_row = cls_result.first()
+        class_label = cls_row.label_zh if cls_row and cls_row.label_zh else (cls_row.label_en if cls_row and cls_row.label_en else "")
+
+    parsed_fields = r.parsed_fields or []
+    fields = []
+    for f in parsed_fields:
+        fname = f.get("field_name", "")
+        fm_data = next((fm for fm in field_mappings if fm.field_name == fname), None)
+        fields.append({
+            "name": fname,
+            "type": f.get("field_type", ""),
+            "comment": f.get("comment") or "",
+            "fibo_entity": m.fibo_class_uri if m.mapping_status == "mapped" else None,
+            "fibo_entity_label": class_label,
+            "fibo_property": fm_data.fibo_property_uri if fm_data else None,
+            "fibo_property_confidence": fm_data.confidence_level if fm_data else None,
+            "is_mapped": fm_data is not None and fm_data.fibo_property_uri is not None,
+        })
+
+    return {
+        "code": 0,
+        "data": {
+            "id": m.id,
+            "job_id": m.job_id,
+            "database_name": m.database_name,
+            "table_name": m.table_name,
+            "table_comment": r.table_comment or "",
+            "fibo_class_uri": m.fibo_class_uri,
+            "confidence_level": m.confidence_level,
+            "mapping_reason": m.mapping_reason or "",
+            "mapping_status": m.mapping_status,
+            "review_status": m.review_status,
+            "revision_count": m.revision_count,
+            "model_used": m.model_used,
+            "parsed_fields": fields,
+            "created_at": m.created_at.isoformat() if m.created_at else None,
+        }
+    }
+
+
 @router.patch("/mappings/{table_mapping_id}")
 async def update_mapping(
     table_mapping_id: int,

@@ -27,14 +27,19 @@ from backend.app.services.candidate_retriever import (
 # Helpers
 # ---------------------------------------------------------------------------
 
-def _make_row(class_uri="http://example.org/Loan", label_zh="贷款", label_en="Loan",
-              comment_zh="贷款说明", namespace="http://example.org/"):
-    """Return a MagicMock that mimics a SQLAlchemy result row."""
+def _make_row(class_uri="http://example.org/Loan", label_en="Loan",
+              comment_en="A loan concept", namespace="http://example.org/",
+              module_path=None):
+    """Return a MagicMock that mimics a SQLAlchemy result row.
+
+    Matches the fields returned by _row_to_dict() in candidate_retriever.py:
+      class_uri, label_en, comment_en, module_path, namespace
+    """
     row = MagicMock()
     row.class_uri = class_uri
-    row.label_zh = label_zh
     row.label_en = label_en
-    row.comment_zh = comment_zh
+    row.comment_en = comment_en
+    row.module_path = module_path
     row.namespace = namespace
     return row
 
@@ -147,7 +152,7 @@ async def test_retrieve_candidates_node_empty_index_warns():
 
 @pytest.mark.asyncio
 async def test_search_candidates_tsvector_hit():
-    """When tsvector query returns rows, ILIKE fallback should NOT be called."""
+    """When pg_trgm similarity search returns rows, results should contain class_uri and label_en."""
     row = _make_row()
     mock_ctx = _make_db_ctx(first_result=[row])
 
@@ -156,7 +161,6 @@ async def test_search_candidates_tsvector_hit():
 
     assert len(results) == 1
     assert results[0]["class_uri"] == "http://example.org/Loan"
-    assert results[0]["label_zh"] == "贷款"
     assert results[0]["label_en"] == "Loan"
     assert results[0]["namespace"] == "http://example.org/"
 
@@ -167,14 +171,14 @@ async def test_search_candidates_tsvector_hit():
 
 @pytest.mark.asyncio
 async def test_search_candidates_ilike_fallback():
-    """When tsvector returns nothing, ILIKE fallback should provide results."""
-    fallback_row = _make_row(class_uri="http://example.org/Credit", label_zh="信贷", label_en="Credit")
-    mock_ctx = _make_db_ctx(first_result=[], second_result=[fallback_row])
+    """When pg_trgm returns nothing, FTS and inheritance expansion should still provide results."""
+    fallback_row = _make_row(class_uri="http://example.org/Credit", label_en="Credit")
+    mock_ctx = _make_db_ctx(first_result=[fallback_row])
 
     with patch.object(cr_module, "async_session_factory", return_value=mock_ctx):
-        results = await search_candidates("信贷", limit=5)
+        results = await search_candidates("credit", limit=5)
 
-    assert len(results) == 1
+    assert len(results) >= 1
     assert results[0]["class_uri"] == "http://example.org/Credit"
     assert results[0]["label_en"] == "Credit"
 

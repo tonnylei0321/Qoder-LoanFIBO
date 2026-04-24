@@ -126,6 +126,9 @@ class TracerService:
     async def flush_to_pg(self, db_session) -> int:
         """从 Redis Stream 消费 Trace 并批量写入 PG。
 
+        每条消息独立事务：成功则 commit，失败则 rollback 后继续下一条。
+        避免 PG InFailedSQLTransactionError 导致整个批次死循环刷屏。
+
         Returns:
             写入的记录数。
         """
@@ -187,19 +190,25 @@ class TracerService:
                                 "created_at": created_at_dt,
                             },
                         )
+                        # 逐条提交，避免后续失败导致整批回滚
+                        await db_session.commit()
                         count += 1
                     except Exception as e:
+                        # 回滚中止的事务，确保下一条 INSERT 能正常执行
+                        await db_session.rollback()
                         logger.warning("Trace 写入 PG 失败 (msg_id=%s): %s", msg_id, e)
 
-                    # 确认消费
+                    # 无论成功失败都确认消费，避免重复刷盘死循环
                     await self._redis.xack(TRACE_STREAM, "pg-flusher", msg_id)
-
-            if count > 0:
-                await db_session.commit()
 
             return count
 
         except Exception as e:
+            # 外层异常也要回滚，防止事务中止状态残留
+            try:
+                await db_session.rollback()
+            except Exception:
+                pass
             logger.warning("Trace flush_to_pg 异常: %s", e)
             return 0
 

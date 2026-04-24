@@ -1,0 +1,2076 @@
+# =============================================================================
+# 信贷指标本体 v1.2 - A+B 档精简版(34 个可执行指标)
+# 用友 YonBIP V3.0 NCC / FIBO 本体对齐 + yql 本地扩展
+#
+# 特性:
+# 1. 包含 A+B 档 33 个 + 追加三表一致性(POST-D2-03),合计 34 个
+# 2. NCC 表、字段含中文 rdfs:label
+# 3. 每个指标内嵌 yql:hasSQL,代理服务 SPARQL 后直接 JDBC 执行
+# 4. FIBO 白名单引用(v1.1 核验 0 幻觉)
+# 5. SQL 字段 100% 对齐真实 NCC DDL
+# =============================================================================
+
+@prefix owl:     <http://www.w3.org/2002/07/owl#> .
+@prefix rdf:     <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs:    <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd:     <http://www.w3.org/2001/XMLSchema#> .
+@prefix skos:    <http://www.w3.org/2004/02/skos/core#> .
+@prefix dcterms: <http://purl.org/dc/terms/> .
+
+@prefix fibo-fbc-dae-dbt:  <https://spec.edmcouncil.org/fibo/ontology/FBC/DebtAndEquities/Debt/> .
+@prefix fibo-fbc-pas-fpas: <https://spec.edmcouncil.org/fibo/ontology/FBC/ProductsAndServices/FinancialProductsAndServices/> .
+@prefix fibo-fnd-acc-cur:  <https://spec.edmcouncil.org/fibo/ontology/FND/Accounting/CurrencyAmount/> .
+@prefix fibo-fnd-agr-ctr:  <https://spec.edmcouncil.org/fibo/ontology/FND/Agreements/Contracts/> .
+@prefix fibo-fnd-arr-rt:   <https://spec.edmcouncil.org/fibo/ontology/FND/Arrangements/Ratios/> .
+@prefix fibo-fnd-pas-psch: <https://spec.edmcouncil.org/fibo/ontology/FND/ProductsAndServices/PaymentsAndSchedules/> .
+
+@prefix yql:     <http://yql.example.com/ontology/credit-risk/> .
+@prefix ncc:     <http://yql.example.com/ontology/ncc-mapping/> .
+@prefix scn:     <http://yql.example.com/ontology/scenario/> .
+@prefix acc:     <http://yql.example.com/ontology/account-code/> .
+
+# -------------------- Ontology 元数据 --------------------
+<http://yql.example.com/ontology/credit-risk/v1.2> a owl:Ontology ;
+    dcterms:title "信贷指标本体 v1.2 - A+B 档精简版(34 指标)"@zh ;
+    owl:versionInfo "1.2.0" ;
+    dcterms:created "2026-04-21"^^xsd:date .
+
+# -------------------- 顶层类 --------------------
+yql:Indicator a owl:Class ; rdfs:label "信贷指标"@zh .
+yql:Ratio a owl:Class ; rdfs:subClassOf yql:Indicator, fibo-fnd-arr-rt:Ratio ; rdfs:label "比率指标"@zh .
+yql:Days a owl:Class ; rdfs:subClassOf yql:Indicator ; rdfs:label "天数指标"@zh .
+yql:ChangeRate a owl:Class ; rdfs:subClassOf yql:Indicator ; rdfs:label "变化率指标"@zh .
+yql:Concentration a owl:Class ; rdfs:subClassOf yql:Indicator ; rdfs:label "集中度指标"@zh .
+yql:Amount a owl:Class ; rdfs:subClassOf yql:Indicator, fibo-fnd-acc-cur:MonetaryAmount ; rdfs:label "金额指标"@zh .
+
+yql:NCCTable a owl:Class ; rdfs:label "NCC 物理表"@zh .
+yql:NCCField a owl:Class ; rdfs:label "NCC 物理字段"@zh .
+yql:AccountCode a owl:Class ; rdfs:label "会计科目编码"@zh .
+yql:Scenario a owl:Class ; rdfs:label "应用场景"@zh .
+
+# -------------------- 对象属性 --------------------
+yql:belongsToTable a owl:ObjectProperty ; rdfs:label "所属表"@zh ;
+    rdfs:domain yql:NCCField ; rdfs:range yql:NCCTable .
+yql:mapsToField a owl:ObjectProperty ; rdfs:label "映射到字段"@zh ;
+    rdfs:domain yql:Indicator ; rdfs:range yql:NCCField .
+yql:usesTable a owl:ObjectProperty ; rdfs:label "引用表"@zh ;
+    rdfs:domain yql:Indicator ; rdfs:range yql:NCCTable .
+yql:appliedInScenario a owl:ObjectProperty ; rdfs:label "应用场景"@zh ;
+    rdfs:range yql:Scenario .
+yql:usesAccountCode a owl:ObjectProperty ; rdfs:label "使用科目"@zh ;
+    rdfs:range yql:AccountCode .
+
+# -------------------- 数据属性 --------------------
+yql:hasFormula a owl:DatatypeProperty ; rdfs:label "计算公式"@zh ; rdfs:range xsd:string .
+yql:hasSQL a owl:DatatypeProperty ; rdfs:label "可执行 SQL"@zh ;
+    rdfs:comment "代理服务 SPARQL 查出后直接 JDBC 执行"@zh ; rdfs:range xsd:string .
+yql:tableCode a owl:DatatypeProperty ; rdfs:label "表英文代码"@zh ; rdfs:range xsd:string .
+yql:fieldCode a owl:DatatypeProperty ; rdfs:label "字段英文代码"@zh ; rdfs:range xsd:string .
+yql:fieldType a owl:DatatypeProperty ; rdfs:label "字段类型"@zh ; rdfs:range xsd:string .
+yql:complexityTier a owl:DatatypeProperty ; rdfs:label "复杂度档位"@zh ; rdfs:range xsd:string .
+yql:greenThreshold a owl:DatatypeProperty ; rdfs:label "绿灯阈值"@zh ; rdfs:range xsd:string .
+yql:amberThreshold a owl:DatatypeProperty ; rdfs:label "黄灯阈值"@zh ; rdfs:range xsd:string .
+yql:redThreshold a owl:DatatypeProperty ; rdfs:label "红灯阈值"@zh ; rdfs:range xsd:string .
+yql:unit a owl:DatatypeProperty ; rdfs:label "单位"@zh ; rdfs:range xsd:string .
+yql:accountCodeValue a owl:DatatypeProperty ; rdfs:label "科目编码值"@zh ; rdfs:range xsd:string .
+
+# -------------------- 应用场景 --------------------
+scn:PreLoanDD a yql:Scenario ; rdfs:label "贷前尽调"@zh .
+scn:PostLoanMonitoring a yql:Scenario ; rdfs:label "贷后监控"@zh .
+scn:SupplyChainFinance a yql:Scenario ; rdfs:label "供应链金融"@zh .
+
+
+# -------------------- 会计科目编码 --------------------
+acc:Account_1001 a yql:AccountCode ; rdfs:label "1001 库存现金"@zh ; yql:accountCodeValue "1001" ; skos:prefLabel "库存现金"@zh .
+acc:Account_1002 a yql:AccountCode ; rdfs:label "1002 银行存款"@zh ; yql:accountCodeValue "1002" ; skos:prefLabel "银行存款"@zh .
+acc:Account_1012 a yql:AccountCode ; rdfs:label "1012 其他货币资金"@zh ; yql:accountCodeValue "1012" ; skos:prefLabel "其他货币资金"@zh .
+acc:Account_1101 a yql:AccountCode ; rdfs:label "1101 交易性金融资产"@zh ; yql:accountCodeValue "1101" ; skos:prefLabel "交易性金融资产"@zh .
+acc:Account_3101 a yql:AccountCode ; rdfs:label "3101 衍生金融资产"@zh ; yql:accountCodeValue "3101" ; skos:prefLabel "衍生金融资产"@zh .
+acc:Account_1121 a yql:AccountCode ; rdfs:label "1121 应收票据"@zh ; yql:accountCodeValue "1121" ; skos:prefLabel "应收票据"@zh .
+acc:Account_1122 a yql:AccountCode ; rdfs:label "1122 应收账款"@zh ; yql:accountCodeValue "1122" ; skos:prefLabel "应收账款"@zh .
+acc:Account_1123 a yql:AccountCode ; rdfs:label "1123 预付账款"@zh ; yql:accountCodeValue "1123" ; skos:prefLabel "预付账款"@zh .
+acc:Account_1125 a yql:AccountCode ; rdfs:label "1125 消耗性生物资产"@zh ; yql:accountCodeValue "1125" ; skos:prefLabel "消耗性生物资产"@zh .
+acc:Account_1126 a yql:AccountCode ; rdfs:label "1126 材料采购"@zh ; yql:accountCodeValue "1126" ; skos:prefLabel "材料采购"@zh .
+acc:Account_1131 a yql:AccountCode ; rdfs:label "1131 应收股利"@zh ; yql:accountCodeValue "1131" ; skos:prefLabel "应收股利"@zh .
+acc:Account_1132 a yql:AccountCode ; rdfs:label "1132 应收利息"@zh ; yql:accountCodeValue "1132" ; skos:prefLabel "应收利息"@zh .
+acc:Account_1221 a yql:AccountCode ; rdfs:label "1221 其他应收款"@zh ; yql:accountCodeValue "1221" ; skos:prefLabel "其他应收款"@zh .
+acc:Account_1231 a yql:AccountCode ; rdfs:label "1231 坏账准备"@zh ; yql:accountCodeValue "1231" ; skos:prefLabel "坏账准备"@zh .
+acc:Account_1401 a yql:AccountCode ; rdfs:label "1401 材料采购"@zh ; yql:accountCodeValue "1401" ; skos:prefLabel "材料采购"@zh .
+acc:Account_1402 a yql:AccountCode ; rdfs:label "1402 在途物资"@zh ; yql:accountCodeValue "1402" ; skos:prefLabel "在途物资"@zh .
+acc:Account_1403 a yql:AccountCode ; rdfs:label "1403 原材料"@zh ; yql:accountCodeValue "1403" ; skos:prefLabel "原材料"@zh .
+acc:Account_1404 a yql:AccountCode ; rdfs:label "1404 材料成本差异"@zh ; yql:accountCodeValue "1404" ; skos:prefLabel "材料成本差异"@zh .
+acc:Account_1405 a yql:AccountCode ; rdfs:label "1405 库存商品"@zh ; yql:accountCodeValue "1405" ; skos:prefLabel "库存商品"@zh .
+acc:Account_1406 a yql:AccountCode ; rdfs:label "1406 发出商品"@zh ; yql:accountCodeValue "1406" ; skos:prefLabel "发出商品"@zh .
+acc:Account_1407 a yql:AccountCode ; rdfs:label "1407 商品进销差价"@zh ; yql:accountCodeValue "1407" ; skos:prefLabel "商品进销差价"@zh .
+acc:Account_1408 a yql:AccountCode ; rdfs:label "1408 委托加工物资"@zh ; yql:accountCodeValue "1408" ; skos:prefLabel "委托加工物资"@zh .
+acc:Account_1411 a yql:AccountCode ; rdfs:label "1411 周转材料"@zh ; yql:accountCodeValue "1411" ; skos:prefLabel "周转材料"@zh .
+acc:Account_1471 a yql:AccountCode ; rdfs:label "1471 存货跌价准备"@zh ; yql:accountCodeValue "1471" ; skos:prefLabel "存货跌价准备"@zh .
+acc:Account_1501 a yql:AccountCode ; rdfs:label "1501 债权投资"@zh ; yql:accountCodeValue "1501" ; skos:prefLabel "债权投资"@zh .
+acc:Account_1521 a yql:AccountCode ; rdfs:label "1521 长期股权投资"@zh ; yql:accountCodeValue "1521" ; skos:prefLabel "长期股权投资"@zh .
+acc:Account_1531 a yql:AccountCode ; rdfs:label "1531 长期应收款"@zh ; yql:accountCodeValue "1531" ; skos:prefLabel "长期应收款"@zh .
+acc:Account_1602 a yql:AccountCode ; rdfs:label "1602 累计折旧"@zh ; yql:accountCodeValue "1602" ; skos:prefLabel "累计折旧"@zh .
+acc:Account_1702 a yql:AccountCode ; rdfs:label "1702 累计摊销"@zh ; yql:accountCodeValue "1702" ; skos:prefLabel "累计摊销"@zh .
+acc:Account_1703 a yql:AccountCode ; rdfs:label "1703 商誉"@zh ; yql:accountCodeValue "1703" ; skos:prefLabel "商誉"@zh .
+acc:Account_1711 a yql:AccountCode ; rdfs:label "1711 商誉"@zh ; yql:accountCodeValue "1711" ; skos:prefLabel "商誉"@zh .
+acc:Account_1801 a yql:AccountCode ; rdfs:label "1801 长期待摊费用"@zh ; yql:accountCodeValue "1801" ; skos:prefLabel "长期待摊费用"@zh .
+acc:Account_1811 a yql:AccountCode ; rdfs:label "1811 递延所得税资产"@zh ; yql:accountCodeValue "1811" ; skos:prefLabel "递延所得税资产"@zh .
+acc:Account_2001 a yql:AccountCode ; rdfs:label "2001 短期借款"@zh ; yql:accountCodeValue "2001" ; skos:prefLabel "短期借款"@zh .
+acc:Account_2101 a yql:AccountCode ; rdfs:label "2101 交易性金融负债"@zh ; yql:accountCodeValue "2101" ; skos:prefLabel "交易性金融负债"@zh .
+acc:Account_2201 a yql:AccountCode ; rdfs:label "2201 应付票据"@zh ; yql:accountCodeValue "2201" ; skos:prefLabel "应付票据"@zh .
+acc:Account_2202 a yql:AccountCode ; rdfs:label "2202 应付账款"@zh ; yql:accountCodeValue "2202" ; skos:prefLabel "应付账款"@zh .
+acc:Account_2203 a yql:AccountCode ; rdfs:label "2203 预收账款"@zh ; yql:accountCodeValue "2203" ; skos:prefLabel "预收账款"@zh .
+acc:Account_2204 a yql:AccountCode ; rdfs:label "2204 合同负债"@zh ; yql:accountCodeValue "2204" ; skos:prefLabel "合同负债"@zh .
+acc:Account_2211 a yql:AccountCode ; rdfs:label "2211 应付职工薪酬"@zh ; yql:accountCodeValue "2211" ; skos:prefLabel "应付职工薪酬"@zh .
+acc:Account_2221 a yql:AccountCode ; rdfs:label "2221 应交税费"@zh ; yql:accountCodeValue "2221" ; skos:prefLabel "应交税费"@zh .
+acc:Account_2241 a yql:AccountCode ; rdfs:label "2241 其他应付款"@zh ; yql:accountCodeValue "2241" ; skos:prefLabel "其他应付款"@zh .
+acc:Account_2501 a yql:AccountCode ; rdfs:label "2501 长期借款"@zh ; yql:accountCodeValue "2501" ; skos:prefLabel "长期借款"@zh .
+acc:Account_2502 a yql:AccountCode ; rdfs:label "2502 应付债券"@zh ; yql:accountCodeValue "2502" ; skos:prefLabel "应付债券"@zh .
+acc:Account_2701 a yql:AccountCode ; rdfs:label "2701 长期应付款"@zh ; yql:accountCodeValue "2701" ; skos:prefLabel "长期应付款"@zh .
+acc:Account_4001 a yql:AccountCode ; rdfs:label "4001 实收资本"@zh ; yql:accountCodeValue "4001" ; skos:prefLabel "实收资本"@zh .
+acc:Account_4002 a yql:AccountCode ; rdfs:label "4002 资本公积"@zh ; yql:accountCodeValue "4002" ; skos:prefLabel "资本公积"@zh .
+acc:Account_4101 a yql:AccountCode ; rdfs:label "4101 盈余公积"@zh ; yql:accountCodeValue "4101" ; skos:prefLabel "盈余公积"@zh .
+acc:Account_4104 a yql:AccountCode ; rdfs:label "4104 未分配利润"@zh ; yql:accountCodeValue "4104" ; skos:prefLabel "未分配利润"@zh .
+acc:Account_4201 a yql:AccountCode ; rdfs:label "4201 库存股"@zh ; yql:accountCodeValue "4201" ; skos:prefLabel "库存股"@zh .
+acc:Account_6001 a yql:AccountCode ; rdfs:label "6001 主营业务收入"@zh ; yql:accountCodeValue "6001" ; skos:prefLabel "主营业务收入"@zh .
+acc:Account_6051 a yql:AccountCode ; rdfs:label "6051 其他业务收入"@zh ; yql:accountCodeValue "6051" ; skos:prefLabel "其他业务收入"@zh .
+acc:Account_6401 a yql:AccountCode ; rdfs:label "6401 主营业务成本"@zh ; yql:accountCodeValue "6401" ; skos:prefLabel "主营业务成本"@zh .
+acc:Account_6402 a yql:AccountCode ; rdfs:label "6402 其他业务成本"@zh ; yql:accountCodeValue "6402" ; skos:prefLabel "其他业务成本"@zh .
+acc:Account_6403 a yql:AccountCode ; rdfs:label "6403 税金及附加"@zh ; yql:accountCodeValue "6403" ; skos:prefLabel "税金及附加"@zh .
+acc:Account_6601 a yql:AccountCode ; rdfs:label "6601 销售费用"@zh ; yql:accountCodeValue "6601" ; skos:prefLabel "销售费用"@zh .
+acc:Account_6602 a yql:AccountCode ; rdfs:label "6602 管理费用"@zh ; yql:accountCodeValue "6602" ; skos:prefLabel "管理费用"@zh .
+acc:Account_6603 a yql:AccountCode ; rdfs:label "6603 财务费用"@zh ; yql:accountCodeValue "6603" ; skos:prefLabel "财务费用"@zh .
+acc:Account_6604 a yql:AccountCode ; rdfs:label "6604 研发费用"@zh ; yql:accountCodeValue "6604" ; skos:prefLabel "研发费用"@zh .
+acc:Account_6701 a yql:AccountCode ; rdfs:label "6701 资产减值损失"@zh ; yql:accountCodeValue "6701" ; skos:prefLabel "资产减值损失"@zh .
+acc:Account_6702 a yql:AccountCode ; rdfs:label "6702 信用减值损失"@zh ; yql:accountCodeValue "6702" ; skos:prefLabel "信用减值损失"@zh .
+acc:Account_6111 a yql:AccountCode ; rdfs:label "6111 投资收益"@zh ; yql:accountCodeValue "6111" ; skos:prefLabel "投资收益"@zh .
+acc:Account_6117 a yql:AccountCode ; rdfs:label "6117 其他收益"@zh ; yql:accountCodeValue "6117" ; skos:prefLabel "其他收益"@zh .
+acc:Account_6301 a yql:AccountCode ; rdfs:label "6301 营业外收入"@zh ; yql:accountCodeValue "6301" ; skos:prefLabel "营业外收入"@zh .
+acc:Account_6711 a yql:AccountCode ; rdfs:label "6711 营业外支出"@zh ; yql:accountCodeValue "6711" ; skos:prefLabel "营业外支出"@zh .
+acc:Account_6801 a yql:AccountCode ; rdfs:label "6801 所得税费用"@zh ; yql:accountCodeValue "6801" ; skos:prefLabel "所得税费用"@zh .
+
+# -------------------- NCC 表 --------------------
+ncc:AP_PAYABLEITEM a yql:NCCTable ;
+    rdfs:label "应付单明细表"@zh ;
+    skos:prefLabel "应付单明细表"@zh ;
+    yql:tableCode "AP_PAYABLEITEM" .
+ncc:ARAP_BALANCE a yql:NCCTable ;
+    rdfs:label "往来余额表"@zh ;
+    skos:prefLabel "往来余额表"@zh ;
+    yql:tableCode "ARAP_BALANCE" .
+ncc:AR_RECBILL a yql:NCCTable ;
+    rdfs:label "应收单主表"@zh ;
+    skos:prefLabel "应收单主表"@zh ;
+    yql:tableCode "AR_RECBILL" .
+ncc:AR_RECITEM a yql:NCCTable ;
+    rdfs:label "应收单明细表"@zh ;
+    skos:prefLabel "应收单明细表"@zh ;
+    yql:tableCode "AR_RECITEM" .
+ncc:BATM_FINANCING a yql:NCCTable ;
+    rdfs:label "融资台账表"@zh ;
+    skos:prefLabel "融资台账表"@zh ;
+    yql:tableCode "BATM_FINANCING" .
+ncc:BD_CUSTOMER a yql:NCCTable ;
+    rdfs:label "客户基础档案"@zh ;
+    skos:prefLabel "客户基础档案"@zh ;
+    yql:tableCode "BD_CUSTOMER" .
+ncc:BD_SUPPLIER a yql:NCCTable ;
+    rdfs:label "供应商基础档案"@zh ;
+    skos:prefLabel "供应商基础档案"@zh ;
+    yql:tableCode "BD_SUPPLIER" .
+ncc:BOND_CONTRACT a yql:NCCTable ;
+    rdfs:label "债券合同表"@zh ;
+    skos:prefLabel "债券合同表"@zh ;
+    yql:tableCode "BOND_CONTRACT" .
+ncc:CDMC_CONTRACT a yql:NCCTable ;
+    rdfs:label "融资合同主表"@zh ;
+    skos:prefLabel "融资合同主表"@zh ;
+    yql:tableCode "CDMC_CONTRACT" .
+ncc:CDMC_REPAYPRCPL a yql:NCCTable ;
+    rdfs:label "还本计划表"@zh ;
+    skos:prefLabel "还本计划表"@zh ;
+    yql:tableCode "CDMC_REPAYPRCPL" .
+ncc:CT_SALE a yql:NCCTable ;
+    rdfs:label "销售合同主表"@zh ;
+    skos:prefLabel "销售合同主表"@zh ;
+    yql:tableCode "CT_SALE" .
+ncc:GL_BALANCE a yql:NCCTable ;
+    rdfs:label "总账余额表"@zh ;
+    skos:prefLabel "总账余额表"@zh ;
+    yql:tableCode "GL_BALANCE" .
+ncc:GL_CASHFLOWCASE a yql:NCCTable ;
+    rdfs:label "现金流量项目余额表"@zh ;
+    skos:prefLabel "现金流量项目余额表"@zh ;
+    yql:tableCode "GL_CASHFLOWCASE" .
+ncc:GL_VOUCHER a yql:NCCTable ;
+    rdfs:label "总账凭证表"@zh ;
+    skos:prefLabel "总账凭证表"@zh ;
+    yql:tableCode "GL_VOUCHER" .
+ncc:GPMC_GUACONTRACT a yql:NCCTable ;
+    rdfs:label "担保合同主表"@zh ;
+    skos:prefLabel "担保合同主表"@zh ;
+    yql:tableCode "GPMC_GUACONTRACT" .
+ncc:GPMC_GUAPLEINF a yql:NCCTable ;
+    rdfs:label "质押信息表"@zh ;
+    skos:prefLabel "质押信息表"@zh ;
+    yql:tableCode "GPMC_GUAPLEINF" .
+ncc:IA_MONTHNAB a yql:NCCTable ;
+    rdfs:label "存货月末余额表"@zh ;
+    skos:prefLabel "存货月末余额表"@zh ;
+    yql:tableCode "IA_MONTHNAB" .
+ncc:ICDMC_CONTRACT a yql:NCCTable ;
+    rdfs:label "内部融资合同表"@zh ;
+    skos:prefLabel "内部融资合同表"@zh ;
+    yql:tableCode "ICDMC_CONTRACT" .
+ncc:PO_INVOICE a yql:NCCTable ;
+    rdfs:label "采购发票表"@zh ;
+    skos:prefLabel "采购发票表"@zh ;
+    yql:tableCode "PO_INVOICE" .
+ncc:PO_ORDER a yql:NCCTable ;
+    rdfs:label "采购订单主表"@zh ;
+    skos:prefLabel "采购订单主表"@zh ;
+    yql:tableCode "PO_ORDER" .
+ncc:SO_SALEINVOICE a yql:NCCTable ;
+    rdfs:label "销售发票主表"@zh ;
+    skos:prefLabel "销售发票主表"@zh ;
+    yql:tableCode "SO_SALEINVOICE" .
+
+# -------------------- NCC 字段 --------------------
+ncc:AP_PAYABLEITEM__BILLDATE a yql:NCCField ;
+    rdfs:label "应付单明细表.日期"@zh ;
+    skos:prefLabel "日期"@zh ;
+    yql:fieldCode "BILLDATE" ;
+    yql:fieldType "CHAR(19)" ;
+    yql:belongsToTable ncc:AP_PAYABLEITEM .
+ncc:AP_PAYABLEITEM__PK_ORG a yql:NCCField ;
+    rdfs:label "应付单明细表.组织"@zh ;
+    skos:prefLabel "组织"@zh ;
+    yql:fieldCode "PK_ORG" ;
+    yql:fieldType "CHAR(20)" ;
+    yql:belongsToTable ncc:AP_PAYABLEITEM .
+ncc:ARAP_BALANCE__ACCPERIOD a yql:NCCField ;
+    rdfs:label "往来余额表.会计期间"@zh ;
+    skos:prefLabel "会计期间"@zh ;
+    yql:fieldCode "ACCPERIOD" ;
+    yql:fieldType "CHAR(7)" ;
+    yql:belongsToTable ncc:ARAP_BALANCE .
+ncc:ARAP_BALANCE__ACCYEAR a yql:NCCField ;
+    rdfs:label "往来余额表.会计年度"@zh ;
+    skos:prefLabel "会计年度"@zh ;
+    yql:fieldCode "ACCYEAR" ;
+    yql:fieldType "CHAR(4)" ;
+    yql:belongsToTable ncc:ARAP_BALANCE .
+ncc:ARAP_BALANCE__BILLCLASS a yql:NCCField ;
+    rdfs:label "往来余额表.单据类别(AR/AP)"@zh ;
+    skos:prefLabel "单据类别(AR/AP)"@zh ;
+    yql:fieldCode "BILLCLASS" ;
+    yql:fieldType "VARCHAR2(10)" ;
+    yql:belongsToTable ncc:ARAP_BALANCE .
+ncc:ARAP_BALANCE__CUSTOMER a yql:NCCField ;
+    rdfs:label "往来余额表.客户主键"@zh ;
+    skos:prefLabel "客户主键"@zh ;
+    yql:fieldCode "CUSTOMER" ;
+    yql:fieldType "VARCHAR2(20)" ;
+    yql:belongsToTable ncc:ARAP_BALANCE .
+ncc:ARAP_BALANCE__LOCAL_MONEY_CR a yql:NCCField ;
+    rdfs:label "往来余额表.本币贷方"@zh ;
+    skos:prefLabel "本币贷方"@zh ;
+    yql:fieldCode "LOCAL_MONEY_CR" ;
+    yql:fieldType "NUMBER(22, 28, 8)" ;
+    yql:belongsToTable ncc:ARAP_BALANCE .
+ncc:ARAP_BALANCE__LOCAL_MONEY_DE a yql:NCCField ;
+    rdfs:label "往来余额表.本币借方"@zh ;
+    skos:prefLabel "本币借方"@zh ;
+    yql:fieldCode "LOCAL_MONEY_DE" ;
+    yql:fieldType "NUMBER(22, 28, 8)" ;
+    yql:belongsToTable ncc:ARAP_BALANCE .
+ncc:ARAP_BALANCE__PK_ORG a yql:NCCField ;
+    rdfs:label "往来余额表.组织"@zh ;
+    skos:prefLabel "组织"@zh ;
+    yql:fieldCode "PK_ORG" ;
+    yql:fieldType "CHAR(20)" ;
+    yql:belongsToTable ncc:ARAP_BALANCE .
+ncc:AR_RECBILL__BILLPERIOD a yql:NCCField ;
+    rdfs:label "应收单主表.单据期间"@zh ;
+    skos:prefLabel "单据期间"@zh ;
+    yql:fieldCode "BILLPERIOD" ;
+    yql:fieldType "CHAR(2)" ;
+    yql:belongsToTable ncc:AR_RECBILL .
+ncc:AR_RECBILL__BILLSTATUS a yql:NCCField ;
+    rdfs:label "应收单主表.单据状态"@zh ;
+    skos:prefLabel "单据状态"@zh ;
+    yql:fieldCode "BILLSTATUS" ;
+    yql:fieldType "NUMBER(22, 38, 0)" ;
+    yql:belongsToTable ncc:AR_RECBILL .
+ncc:AR_RECBILL__BILLYEAR a yql:NCCField ;
+    rdfs:label "应收单主表.单据年度"@zh ;
+    skos:prefLabel "单据年度"@zh ;
+    yql:fieldCode "BILLYEAR" ;
+    yql:fieldType "CHAR(4)" ;
+    yql:belongsToTable ncc:AR_RECBILL .
+ncc:AR_RECBILL__DEF1 a yql:NCCField ;
+    rdfs:label "应收单主表.DEF1"@zh ;
+    skos:prefLabel "DEF1"@zh ;
+    yql:fieldCode "DEF1" ;
+    yql:fieldType "VARCHAR2(101)" ;
+    yql:belongsToTable ncc:AR_RECBILL .
+ncc:AR_RECBILL__LOCAL_MONEY a yql:NCCField ;
+    rdfs:label "应收单主表.本币金额"@zh ;
+    skos:prefLabel "本币金额"@zh ;
+    yql:fieldCode "LOCAL_MONEY" ;
+    yql:fieldType "NUMBER(22, 28, 8)" ;
+    yql:belongsToTable ncc:AR_RECBILL .
+ncc:AR_RECBILL__PK_ORG a yql:NCCField ;
+    rdfs:label "应收单主表.组织主键"@zh ;
+    skos:prefLabel "组织主键"@zh ;
+    yql:fieldCode "PK_ORG" ;
+    yql:fieldType "CHAR(20)" ;
+    yql:belongsToTable ncc:AR_RECBILL .
+ncc:AR_RECBILL__SCOMMENT a yql:NCCField ;
+    rdfs:label "应收单主表.备注"@zh ;
+    skos:prefLabel "备注"@zh ;
+    yql:fieldCode "SCOMMENT" ;
+    yql:fieldType "VARCHAR2(250)" ;
+    yql:belongsToTable ncc:AR_RECBILL .
+ncc:AR_RECITEM__BILLDATE a yql:NCCField ;
+    rdfs:label "应收单明细表.单据日期"@zh ;
+    skos:prefLabel "单据日期"@zh ;
+    yql:fieldCode "BILLDATE" ;
+    yql:fieldType "CHAR(19)" ;
+    yql:belongsToTable ncc:AR_RECITEM .
+ncc:AR_RECITEM__CUSTOMER a yql:NCCField ;
+    rdfs:label "应收单明细表.客户主键(外键→BD_CUSTOMER.PK_CUSTOMER)"@zh ;
+    skos:prefLabel "客户主键(外键→BD_CUSTOMER.PK_CUSTOMER)"@zh ;
+    yql:fieldCode "CUSTOMER" ;
+    yql:fieldType "VARCHAR2(20)" ;
+    yql:belongsToTable ncc:AR_RECITEM .
+ncc:AR_RECITEM__LOCAL_MONEY_BAL a yql:NCCField ;
+    rdfs:label "应收单明细表.本币余额"@zh ;
+    skos:prefLabel "本币余额"@zh ;
+    yql:fieldCode "LOCAL_MONEY_BAL" ;
+    yql:fieldType "NUMBER(22, 28, 8)" ;
+    yql:belongsToTable ncc:AR_RECITEM .
+ncc:AR_RECITEM__LOCAL_MONEY_DE a yql:NCCField ;
+    rdfs:label "应收单明细表.本币发生额"@zh ;
+    skos:prefLabel "本币发生额"@zh ;
+    yql:fieldCode "LOCAL_MONEY_DE" ;
+    yql:fieldType "NUMBER(22, 28, 8)" ;
+    yql:belongsToTable ncc:AR_RECITEM .
+ncc:AR_RECITEM__PK_ORG a yql:NCCField ;
+    rdfs:label "应收单明细表.组织"@zh ;
+    skos:prefLabel "组织"@zh ;
+    yql:fieldCode "PK_ORG" ;
+    yql:fieldType "CHAR(20)" ;
+    yql:belongsToTable ncc:AR_RECITEM .
+ncc:AR_RECITEM__PK_RECITEM a yql:NCCField ;
+    rdfs:label "应收单明细表.明细主键"@zh ;
+    skos:prefLabel "明细主键"@zh ;
+    yql:fieldCode "PK_RECITEM" ;
+    yql:fieldType "CHAR(20)" ;
+    yql:belongsToTable ncc:AR_RECITEM .
+ncc:BD_CUSTOMER__INNERPROFITCENTER a yql:NCCField ;
+    rdfs:label "客户基础档案.是否内部利润中心(关联方标志)"@zh ;
+    skos:prefLabel "是否内部利润中心(关联方标志)"@zh ;
+    yql:fieldCode "INNERPROFITCENTER" ;
+    yql:fieldType "CHAR(1)" ;
+    yql:belongsToTable ncc:BD_CUSTOMER .
+ncc:BD_CUSTOMER__PK_CUSTOMER a yql:NCCField ;
+    rdfs:label "客户基础档案.客户主键"@zh ;
+    skos:prefLabel "客户主键"@zh ;
+    yql:fieldCode "PK_CUSTOMER" ;
+    yql:fieldType "CHAR(20)" ;
+    yql:belongsToTable ncc:BD_CUSTOMER .
+ncc:BD_SUPPLIER__BEGINDATE a yql:NCCField ;
+    rdfs:label "供应商基础档案.启用日期"@zh ;
+    skos:prefLabel "启用日期"@zh ;
+    yql:fieldCode "BEGINDATE" ;
+    yql:fieldType "CHAR(19)" ;
+    yql:belongsToTable ncc:BD_SUPPLIER .
+ncc:BD_SUPPLIER__INNERPROFITCENTER a yql:NCCField ;
+    rdfs:label "供应商基础档案.是否内部利润中心(关联方标志)"@zh ;
+    skos:prefLabel "是否内部利润中心(关联方标志)"@zh ;
+    yql:fieldCode "INNERPROFITCENTER" ;
+    yql:fieldType "CHAR(1)" ;
+    yql:belongsToTable ncc:BD_SUPPLIER .
+ncc:BD_SUPPLIER__PK_SUPPLIER a yql:NCCField ;
+    rdfs:label "供应商基础档案.供应商主键"@zh ;
+    skos:prefLabel "供应商主键"@zh ;
+    yql:fieldCode "PK_SUPPLIER" ;
+    yql:fieldType "CHAR(20)" ;
+    yql:belongsToTable ncc:BD_SUPPLIER .
+ncc:CT_SALE__FSTATUSFLAG a yql:NCCField ;
+    rdfs:label "销售合同主表.合同状态"@zh ;
+    skos:prefLabel "合同状态"@zh ;
+    yql:fieldCode "FSTATUSFLAG" ;
+    yql:fieldType "NUMBER(22, 38, 0)" ;
+    yql:belongsToTable ncc:CT_SALE .
+ncc:CT_SALE__INVALLIDATE a yql:NCCField ;
+    rdfs:label "销售合同主表.失效日期"@zh ;
+    skos:prefLabel "失效日期"@zh ;
+    yql:fieldCode "INVALLIDATE" ;
+    yql:fieldType "CHAR(19)" ;
+    yql:belongsToTable ncc:CT_SALE .
+ncc:CT_SALE__NTOTALORIGMNY a yql:NCCField ;
+    rdfs:label "销售合同主表.合同总金额"@zh ;
+    skos:prefLabel "合同总金额"@zh ;
+    yql:fieldCode "NTOTALORIGMNY" ;
+    yql:fieldType "NUMBER(22, 28, 8)" ;
+    yql:belongsToTable ncc:CT_SALE .
+ncc:CT_SALE__PK_ORG a yql:NCCField ;
+    rdfs:label "销售合同主表.组织"@zh ;
+    skos:prefLabel "组织"@zh ;
+    yql:fieldCode "PK_ORG" ;
+    yql:fieldType "VARCHAR2(20)" ;
+    yql:belongsToTable ncc:CT_SALE .
+ncc:CT_SALE__VALDATE a yql:NCCField ;
+    rdfs:label "销售合同主表.生效日期"@zh ;
+    skos:prefLabel "生效日期"@zh ;
+    yql:fieldCode "VALDATE" ;
+    yql:fieldType "CHAR(19)" ;
+    yql:belongsToTable ncc:CT_SALE .
+ncc:GL_BALANCE__ACCOUNTCODE a yql:NCCField ;
+    rdfs:label "总账余额表.会计科目编码(冗余)"@zh ;
+    skos:prefLabel "会计科目编码(冗余)"@zh ;
+    yql:fieldCode "ACCOUNTCODE" ;
+    yql:fieldType "VARCHAR2(40)" ;
+    yql:belongsToTable ncc:GL_BALANCE .
+ncc:GL_BALANCE__CREDITAMOUNT a yql:NCCField ;
+    rdfs:label "总账余额表.原币贷方发生额"@zh ;
+    skos:prefLabel "原币贷方发生额"@zh ;
+    yql:fieldCode "CREDITAMOUNT" ;
+    yql:fieldType "NUMBER(22, 28, 8)" ;
+    yql:belongsToTable ncc:GL_BALANCE .
+ncc:GL_BALANCE__LOCALCREDITAMOUNT a yql:NCCField ;
+    rdfs:label "总账余额表.本币贷方发生额"@zh ;
+    skos:prefLabel "本币贷方发生额"@zh ;
+    yql:fieldCode "LOCALCREDITAMOUNT" ;
+    yql:fieldType "NUMBER(22, 28, 8)" ;
+    yql:belongsToTable ncc:GL_BALANCE .
+ncc:GL_BALANCE__LOCALDEBITAMOUNT a yql:NCCField ;
+    rdfs:label "总账余额表.本币借方发生额"@zh ;
+    skos:prefLabel "本币借方发生额"@zh ;
+    yql:fieldCode "LOCALDEBITAMOUNT" ;
+    yql:fieldType "NUMBER(22, 28, 8)" ;
+    yql:belongsToTable ncc:GL_BALANCE .
+ncc:GL_BALANCE__PERIOD a yql:NCCField ;
+    rdfs:label "总账余额表.会计期间(月)"@zh ;
+    skos:prefLabel "会计期间(月)"@zh ;
+    yql:fieldCode "PERIOD" ;
+    yql:fieldType "CHAR(2)" ;
+    yql:belongsToTable ncc:GL_BALANCE .
+ncc:GL_BALANCE__PK_ACCOUNTINGBOOK a yql:NCCField ;
+    rdfs:label "总账余额表.账簿主键"@zh ;
+    skos:prefLabel "账簿主键"@zh ;
+    yql:fieldCode "PK_ACCOUNTINGBOOK" ;
+    yql:fieldType "CHAR(20)" ;
+    yql:belongsToTable ncc:GL_BALANCE .
+ncc:GL_BALANCE__PK_ORG a yql:NCCField ;
+    rdfs:label "总账余额表.组织主键(外键→ORG_ORGS.PK_ORG)"@zh ;
+    skos:prefLabel "组织主键(外键→ORG_ORGS.PK_ORG)"@zh ;
+    yql:fieldCode "PK_ORG" ;
+    yql:fieldType "CHAR(20)" ;
+    yql:belongsToTable ncc:GL_BALANCE .
+ncc:GL_BALANCE__YEAR a yql:NCCField ;
+    rdfs:label "总账余额表.会计年度"@zh ;
+    skos:prefLabel "会计年度"@zh ;
+    yql:fieldCode "YEAR" ;
+    yql:fieldType "CHAR(4)" ;
+    yql:belongsToTable ncc:GL_BALANCE .
+ncc:GL_CASHFLOWCASE__MONEY a yql:NCCField ;
+    rdfs:label "现金流量项目余额表.原币金额"@zh ;
+    skos:prefLabel "原币金额"@zh ;
+    yql:fieldCode "MONEY" ;
+    yql:fieldType "NUMBER(22, 28, 8)" ;
+    yql:belongsToTable ncc:GL_CASHFLOWCASE .
+ncc:GL_CASHFLOWCASE__PK_ACCOUNTINGBOOK a yql:NCCField ;
+    rdfs:label "现金流量项目余额表.账簿主键"@zh ;
+    skos:prefLabel "账簿主键"@zh ;
+    yql:fieldCode "PK_ACCOUNTINGBOOK" ;
+    yql:fieldType "CHAR(20)" ;
+    yql:belongsToTable ncc:GL_CASHFLOWCASE .
+ncc:GL_CASHFLOWCASE__PK_CASHFLOWCASE a yql:NCCField ;
+    rdfs:label "现金流量项目余额表.现金流量实例主键"@zh ;
+    skos:prefLabel "现金流量实例主键"@zh ;
+    yql:fieldCode "PK_CASHFLOWCASE" ;
+    yql:fieldType "CHAR(20)" ;
+    yql:belongsToTable ncc:GL_CASHFLOWCASE .
+ncc:GL_CASHFLOWCASE__PK_ORG a yql:NCCField ;
+    rdfs:label "现金流量项目余额表.组织主键"@zh ;
+    skos:prefLabel "组织主键"@zh ;
+    yql:fieldCode "PK_ORG" ;
+    yql:fieldType "CHAR(20)" ;
+    yql:belongsToTable ncc:GL_CASHFLOWCASE .
+ncc:GL_CASHFLOWCASE__PK_VOUCHER a yql:NCCField ;
+    rdfs:label "现金流量项目余额表.凭证主键"@zh ;
+    skos:prefLabel "凭证主键"@zh ;
+    yql:fieldCode "PK_VOUCHER" ;
+    yql:fieldType "CHAR(20)" ;
+    yql:belongsToTable ncc:GL_CASHFLOWCASE .
+ncc:GL_VOUCHER__PERIOD a yql:NCCField ;
+    rdfs:label "总账凭证表.会计期间"@zh ;
+    skos:prefLabel "会计期间"@zh ;
+    yql:fieldCode "PERIOD" ;
+    yql:fieldType "CHAR(2)" ;
+    yql:belongsToTable ncc:GL_VOUCHER .
+ncc:GL_VOUCHER__PK_VOUCHER a yql:NCCField ;
+    rdfs:label "总账凭证表.凭证主键"@zh ;
+    skos:prefLabel "凭证主键"@zh ;
+    yql:fieldCode "PK_VOUCHER" ;
+    yql:fieldType "CHAR(20)" ;
+    yql:belongsToTable ncc:GL_VOUCHER .
+ncc:GL_VOUCHER__YEAR a yql:NCCField ;
+    rdfs:label "总账凭证表.年度"@zh ;
+    skos:prefLabel "年度"@zh ;
+    yql:fieldCode "YEAR" ;
+    yql:fieldType "CHAR(4)" ;
+    yql:belongsToTable ncc:GL_VOUCHER .
+ncc:GPMC_GUACONTRACT__BUSISTATUS a yql:NCCField ;
+    rdfs:label "担保合同主表.业务状态"@zh ;
+    skos:prefLabel "业务状态"@zh ;
+    yql:fieldCode "BUSISTATUS" ;
+    yql:fieldType "NUMBER(22, 38, 0)" ;
+    yql:belongsToTable ncc:GPMC_GUACONTRACT .
+ncc:GPMC_GUACONTRACT__PK_GUACONTRACT a yql:NCCField ;
+    rdfs:label "担保合同主表.担保合同主键"@zh ;
+    skos:prefLabel "担保合同主键"@zh ;
+    yql:fieldCode "PK_GUACONTRACT" ;
+    yql:fieldType "CHAR(20)" ;
+    yql:belongsToTable ncc:GPMC_GUACONTRACT .
+ncc:GPMC_GUAPLEINF__PK_GUACONTRACT a yql:NCCField ;
+    rdfs:label "质押信息表.担保合同主键"@zh ;
+    skos:prefLabel "担保合同主键"@zh ;
+    yql:fieldCode "PK_GUACONTRACT" ;
+    yql:fieldType "CHAR(20)" ;
+    yql:belongsToTable ncc:GPMC_GUAPLEINF .
+ncc:GPMC_GUAPLEINF__PK_SRCBILLROWID a yql:NCCField ;
+    rdfs:label "质押信息表.源单行ID"@zh ;
+    skos:prefLabel "源单行ID"@zh ;
+    yql:fieldCode "PK_SRCBILLROWID" ;
+    yql:fieldType "VARCHAR2(50)" ;
+    yql:belongsToTable ncc:GPMC_GUAPLEINF .
+ncc:PO_INVOICE__DBILLDATE a yql:NCCField ;
+    rdfs:label "采购发票表.单据日期"@zh ;
+    skos:prefLabel "单据日期"@zh ;
+    yql:fieldCode "DBILLDATE" ;
+    yql:fieldType "CHAR(19)" ;
+    yql:belongsToTable ncc:PO_INVOICE .
+ncc:PO_INVOICE__FBILLSTATUS a yql:NCCField ;
+    rdfs:label "采购发票表.单据状态"@zh ;
+    skos:prefLabel "单据状态"@zh ;
+    yql:fieldCode "FBILLSTATUS" ;
+    yql:fieldType "NUMBER(22, 38, 0)" ;
+    yql:belongsToTable ncc:PO_INVOICE .
+ncc:PO_INVOICE__NTOTALORIGMNY a yql:NCCField ;
+    rdfs:label "采购发票表.总原币金额"@zh ;
+    skos:prefLabel "总原币金额"@zh ;
+    yql:fieldCode "NTOTALORIGMNY" ;
+    yql:fieldType "NUMBER(22, 28, 8)" ;
+    yql:belongsToTable ncc:PO_INVOICE .
+ncc:PO_INVOICE__PK_ORG a yql:NCCField ;
+    rdfs:label "采购发票表.组织"@zh ;
+    skos:prefLabel "组织"@zh ;
+    yql:fieldCode "PK_ORG" ;
+    yql:fieldType "VARCHAR2(20)" ;
+    yql:belongsToTable ncc:PO_INVOICE .
+ncc:PO_INVOICE__PK_SUPPLIER a yql:NCCField ;
+    rdfs:label "采购发票表.供应商主键"@zh ;
+    skos:prefLabel "供应商主键"@zh ;
+    yql:fieldCode "PK_SUPPLIER" ;
+    yql:fieldType "VARCHAR2(20)" ;
+    yql:belongsToTable ncc:PO_INVOICE .
+ncc:SO_SALEINVOICE__CINVOICECUSTID a yql:NCCField ;
+    rdfs:label "销售发票主表.开票客户"@zh ;
+    skos:prefLabel "开票客户"@zh ;
+    yql:fieldCode "CINVOICECUSTID" ;
+    yql:fieldType "VARCHAR2(20)" ;
+    yql:belongsToTable ncc:SO_SALEINVOICE .
+ncc:SO_SALEINVOICE__CINVOICECUSTVID a yql:NCCField ;
+    rdfs:label "销售发票主表.CINVOICECUSTVID"@zh ;
+    skos:prefLabel "CINVOICECUSTVID"@zh ;
+    yql:fieldCode "CINVOICECUSTVID" ;
+    yql:fieldType "VARCHAR2(20)" ;
+    yql:belongsToTable ncc:SO_SALEINVOICE .
+ncc:SO_SALEINVOICE__DBILLDATE a yql:NCCField ;
+    rdfs:label "销售发票主表.单据日期"@zh ;
+    skos:prefLabel "单据日期"@zh ;
+    yql:fieldCode "DBILLDATE" ;
+    yql:fieldType "CHAR(19)" ;
+    yql:belongsToTable ncc:SO_SALEINVOICE .
+ncc:SO_SALEINVOICE__FSTATUSFLAG a yql:NCCField ;
+    rdfs:label "销售发票主表.单据状态"@zh ;
+    skos:prefLabel "单据状态"@zh ;
+    yql:fieldCode "FSTATUSFLAG" ;
+    yql:fieldType "NUMBER(22, 38, 0)" ;
+    yql:belongsToTable ncc:SO_SALEINVOICE .
+ncc:SO_SALEINVOICE__NTOTALORIGMNY a yql:NCCField ;
+    rdfs:label "销售发票主表.总原币金额"@zh ;
+    skos:prefLabel "总原币金额"@zh ;
+    yql:fieldCode "NTOTALORIGMNY" ;
+    yql:fieldType "NUMBER(22, 28, 8)" ;
+    yql:belongsToTable ncc:SO_SALEINVOICE .
+ncc:SO_SALEINVOICE__PK_ORG a yql:NCCField ;
+    rdfs:label "销售发票主表.组织"@zh ;
+    skos:prefLabel "组织"@zh ;
+    yql:fieldCode "PK_ORG" ;
+    yql:fieldType "VARCHAR2(20)" ;
+    yql:belongsToTable ncc:SO_SALEINVOICE .
+
+# -------------------- 指标子类 --------------------
+yql:QuickRatio a owl:Class ;
+    rdfs:subClassOf yql:Ratio ;
+    rdfs:label "速动比率"@zh .
+yql:CurrentRatio a owl:Class ;
+    rdfs:subClassOf yql:Ratio ;
+    rdfs:label "流动比率"@zh .
+yql:CashRatio a owl:Class ;
+    rdfs:subClassOf yql:Ratio ;
+    rdfs:label "现金比率"@zh .
+yql:InterestCoverageRatio a owl:Class ;
+    rdfs:subClassOf yql:Ratio ;
+    rdfs:label "利息覆盖倍数"@zh .
+yql:CashCoverageDays a owl:Class ;
+    rdfs:subClassOf yql:Days ;
+    rdfs:label "现金覆盖天数"@zh .
+yql:EBITDAMargin a owl:Class ;
+    rdfs:subClassOf yql:Ratio ;
+    rdfs:label "EBITDA利润率"@zh .
+yql:GrossMargin a owl:Class ;
+    rdfs:subClassOf yql:Ratio ;
+    rdfs:label "毛利率"@zh .
+yql:NetProfitMargin a owl:Class ;
+    rdfs:subClassOf yql:Ratio ;
+    rdfs:label "净利润率"@zh .
+yql:CFOtoNIRatio a owl:Class ;
+    rdfs:subClassOf yql:Ratio ;
+    rdfs:label "经营现金流净利润比"@zh .
+yql:DebtToAssetRatio a owl:Class ;
+    rdfs:subClassOf yql:Ratio ;
+    rdfs:label "资产负债率"@zh .
+yql:EffectiveNetAssets a owl:Class ;
+    rdfs:subClassOf yql:Amount ;
+    rdfs:label "有效净资产"@zh .
+yql:DaysInventoryOutstanding a owl:Class ;
+    rdfs:subClassOf yql:Days ;
+    rdfs:label "存货周转天数"@zh .
+yql:FreeCashFlow a owl:Class ;
+    rdfs:subClassOf yql:Amount ;
+    rdfs:label "自由现金流"@zh .
+yql:CapExToRevenueRatio a owl:Class ;
+    rdfs:subClassOf yql:Ratio ;
+    rdfs:label "资本支出营收比"@zh .
+yql:TotalAssetTurnover a owl:Class ;
+    rdfs:subClassOf yql:Ratio ;
+    rdfs:label "总资产周转率"@zh .
+yql:ROE a owl:Class ;
+    rdfs:subClassOf yql:Ratio ;
+    rdfs:label "净资产收益率"@zh .
+yql:CustomerConcentration a owl:Class ;
+    rdfs:subClassOf yql:Concentration ;
+    rdfs:label "客户集中度"@zh .
+yql:SupplierConcentration a owl:Class ;
+    rdfs:subClassOf yql:Concentration ;
+    rdfs:label "供应商集中度"@zh .
+yql:RelatedPartyARRatio a owl:Class ;
+    rdfs:subClassOf yql:Ratio ;
+    rdfs:label "关联方应收占比"@zh .
+yql:RelatedPartyTxRatio a owl:Class ;
+    rdfs:subClassOf yql:Ratio ;
+    rdfs:label "关联方交易占比"@zh .
+yql:ARConcentration a owl:Class ;
+    rdfs:subClassOf yql:Concentration ;
+    rdfs:label "应收集中度"@zh .
+yql:ARDisputeRate a owl:Class ;
+    rdfs:subClassOf yql:Ratio ;
+    rdfs:label "应收争议率"@zh .
+yql:SupplierStability a owl:Class ;
+    rdfs:subClassOf yql:Ratio ;
+    rdfs:label "供应商稳定性"@zh .
+yql:DPO a owl:Class ;
+    rdfs:subClassOf yql:Days ;
+    rdfs:label "应付账款周转天数"@zh .
+yql:SCFLoanHistory a owl:Class ;
+    rdfs:subClassOf yql:Indicator ;
+    rdfs:label "供应链融资历史"@zh .
+yql:ThreeStatementConsistency a owl:Class ;
+    rdfs:subClassOf yql:Indicator ;
+    rdfs:label "三表一致性"@zh .
+yql:RevenueYoYGrowth a owl:Class ;
+    rdfs:subClassOf yql:ChangeRate ;
+    rdfs:label "营收同比增速"@zh .
+yql:GrossMarginQoQChange a owl:Class ;
+    rdfs:subClassOf yql:ChangeRate ;
+    rdfs:label "毛利率环比变化"@zh .
+yql:OnHandContract a owl:Class ;
+    rdfs:subClassOf yql:Amount ;
+    rdfs:label "在手合同金额"@zh .
+yql:NonBankFinancingRatio a owl:Class ;
+    rdfs:subClassOf yql:Ratio ;
+    rdfs:label "非银融资占比"@zh .
+yql:DARChange a owl:Class ;
+    rdfs:subClassOf yql:ChangeRate ;
+    rdfs:label "资产负债率变化"@zh .
+yql:PledgedARConcentration a owl:Class ;
+    rdfs:subClassOf yql:Concentration ;
+    rdfs:label "质押应收集中度"@zh .
+yql:CFOYoYChange a owl:Class ;
+    rdfs:subClassOf yql:ChangeRate ;
+    rdfs:label "经营现金流同比变化"@zh .
+
+# -------------------- 指标个体(34 个,含 SQL)--------------------
+
+yql:Indicator_POST_D2_03 a yql:ThreeStatementConsistency, yql:Indicator ;
+    rdfs:label "三表一致性校验"@zh ;
+    skos:notation "POST-D2-03" ;
+    skos:definition """利润表/资产负债表/现金流量表三表勾稽关系校验""" ;
+    yql:hasFormula """Boolean: ALL(Rule1, Rule2, Rule3) where Rule1: NetIncome_IS = (RetainedEarnings_End - RetainedEarnings_Begin + Dividends), Rule2: CashFlow_NetIncrease = CashEnd - CashBegin, Rule3: CFO_indirect_reconciliation_starts_from_NetIncome""" ;
+    yql:appliedInScenario scn:PostLoanMonitoring ;
+    yql:complexityTier "B" ;
+    yql:usesTable ncc:GL_BALANCE ;
+    yql:mapsToField ncc:GL_BALANCE__ACCOUNTCODE, ncc:GL_BALANCE__LOCALCREDITAMOUNT, ncc:GL_BALANCE__LOCALDEBITAMOUNT, ncc:GL_BALANCE__PERIOD, ncc:GL_BALANCE__PK_ACCOUNTINGBOOK, ncc:GL_BALANCE__PK_ORG, ncc:GL_BALANCE__YEAR ;
+    yql:hasSQL """
+-- POST-D2-03 三表一致性校验
+-- 核对利润表净利润 vs 资产负债表"未分配利润"变动
+WITH ni_pnl AS (
+  SELECT
+    (NVL(SUM(CASE WHEN ACCOUNTCODE LIKE '6001%' OR ACCOUNTCODE LIKE '6051%'
+                  THEN LOCALCREDITAMOUNT - LOCALDEBITAMOUNT END), 0)
+   - NVL(SUM(CASE WHEN ACCOUNTCODE LIKE '64%' OR ACCOUNTCODE LIKE '66%'
+                     OR ACCOUNTCODE LIKE '67%' OR ACCOUNTCODE LIKE '68%'
+                  THEN LOCALDEBITAMOUNT - LOCALCREDITAMOUNT END), 0)
+   + NVL(SUM(CASE WHEN ACCOUNTCODE LIKE '6111%' OR ACCOUNTCODE LIKE '6117%'
+                     OR ACCOUNTCODE LIKE '6301%'
+                  THEN LOCALCREDITAMOUNT - LOCALDEBITAMOUNT END), 0)
+    ) AS amount
+  FROM GL_BALANCE
+  WHERE PK_ORG = :org_id AND PK_ACCOUNTINGBOOK = :book_id
+    AND YEAR = :year AND PERIOD = :period
+),
+ni_bs AS (
+  SELECT NVL(SUM(LOCALCREDITAMOUNT - LOCALDEBITAMOUNT), 0) AS amount
+  FROM GL_BALANCE
+  WHERE PK_ORG = :org_id AND PK_ACCOUNTINGBOOK = :book_id
+    AND YEAR = :year AND PERIOD = :period
+    AND ACCOUNTCODE LIKE '4104%'
+)
+SELECT
+  ni_pnl.amount AS ni_from_pnl,
+  ni_bs.amount AS ni_from_bs,
+  ABS(ni_pnl.amount - ni_bs.amount) AS diff,
+  CASE WHEN ABS(ni_pnl.amount - ni_bs.amount) < 0.01 THEN 1 ELSE 0 END AS is_consistent
+FROM ni_pnl, ni_bs;
+-- TODO #TSC-1: 完整三表核对还需现金流量表"净利润"调节项,需附表数据
+""" .
+
+yql:Indicator_POST_D3_01 a yql:RevenueYoYGrowth, yql:Indicator ;
+    rdfs:label "营收同比增速"@zh ;
+    skos:notation "POST-D3-01" ;
+    skos:definition """营业收入同比增长率""" ;
+    yql:hasFormula """(Revenue_current_period - Revenue_same_period_lastyear) / Revenue_same_period_lastyear""" ;
+    yql:appliedInScenario scn:PostLoanMonitoring ;
+    yql:complexityTier "B" ;
+    yql:greenThreshold ">=5%" ;
+    yql:amberThreshold "-5%-5%" ;
+    yql:redThreshold "<-5%" ;
+    yql:usesTable ncc:GL_BALANCE ;
+    yql:mapsToField ncc:GL_BALANCE__ACCOUNTCODE, ncc:GL_BALANCE__LOCALCREDITAMOUNT, ncc:GL_BALANCE__LOCALDEBITAMOUNT, ncc:GL_BALANCE__PERIOD, ncc:GL_BALANCE__PK_ACCOUNTINGBOOK, ncc:GL_BALANCE__PK_ORG, ncc:GL_BALANCE__YEAR ;
+    yql:hasSQL """
+-- POST-D3-01 营收同比增速
+-- 公式: (本期营收 - 上年同期) / 上年同期
+SELECT
+  ROUND((cur.rev - prev.rev) / NULLIF(ABS(prev.rev), 0), 4) AS revenue_yoy_growth
+FROM
+  (SELECT NVL(SUM(LOCALCREDITAMOUNT - LOCALDEBITAMOUNT), 0) AS rev
+   FROM GL_BALANCE
+   WHERE PK_ORG = :org_id AND PK_ACCOUNTINGBOOK = :book_id
+     AND YEAR = :year AND PERIOD = :period
+     AND (ACCOUNTCODE LIKE '6001%' OR ACCOUNTCODE LIKE '6051%')) cur,
+  (SELECT NVL(SUM(LOCALCREDITAMOUNT - LOCALDEBITAMOUNT), 0) AS rev
+   FROM GL_BALANCE
+   WHERE PK_ORG = :org_id AND PK_ACCOUNTINGBOOK = :book_id
+     AND YEAR = :year - 1 AND PERIOD = :period
+     AND (ACCOUNTCODE LIKE '6001%' OR ACCOUNTCODE LIKE '6051%')) prev;
+""" .
+
+yql:Indicator_POST_D3_02 a yql:GrossMarginQoQChange, yql:Indicator ;
+    rdfs:label "毛利率环比变化"@zh ;
+    skos:notation "POST-D3-02" ;
+    skos:definition """毛利率相对上一季度的变化幅度(百分点)""" ;
+    yql:hasFormula """GrossProfitMargin_current_quarter - GrossProfitMargin_prior_quarter (变化量,百分点)""" ;
+    yql:appliedInScenario scn:PostLoanMonitoring ;
+    yql:complexityTier "B" ;
+    yql:greenThreshold ">=-1pp" ;
+    yql:amberThreshold "-3pp 到 -1pp" ;
+    yql:redThreshold "<-3pp" ;
+    yql:usesTable ncc:GL_BALANCE ;
+    yql:mapsToField ncc:GL_BALANCE__ACCOUNTCODE, ncc:GL_BALANCE__LOCALCREDITAMOUNT, ncc:GL_BALANCE__LOCALDEBITAMOUNT, ncc:GL_BALANCE__PERIOD, ncc:GL_BALANCE__PK_ACCOUNTINGBOOK, ncc:GL_BALANCE__PK_ORG, ncc:GL_BALANCE__YEAR ;
+    yql:hasSQL """
+-- POST-D3-02 毛利率环比变化
+WITH pm AS (
+  SELECT
+    PERIOD,
+    ROUND(
+      (NVL(SUM(CASE WHEN ACCOUNTCODE LIKE '6001%' OR ACCOUNTCODE LIKE '6051%'
+                     THEN LOCALCREDITAMOUNT - LOCALDEBITAMOUNT END), 0)
+     - NVL(SUM(CASE WHEN ACCOUNTCODE LIKE '6401%' OR ACCOUNTCODE LIKE '6402%'
+                     THEN LOCALDEBITAMOUNT - LOCALCREDITAMOUNT END), 0)) /
+      NULLIF(NVL(SUM(CASE WHEN ACCOUNTCODE LIKE '6001%' OR ACCOUNTCODE LIKE '6051%'
+                          THEN LOCALCREDITAMOUNT - LOCALDEBITAMOUNT END), 0), 0),
+      4
+    ) AS margin
+  FROM GL_BALANCE
+  WHERE PK_ORG = :org_id AND PK_ACCOUNTINGBOOK = :book_id
+    AND YEAR = :year
+    AND PERIOD IN (:period, LPAD(TO_CHAR(TO_NUMBER(:period) - 1), 2, '0'))
+  GROUP BY PERIOD
+)
+SELECT
+  MAX(CASE WHEN PERIOD = :period THEN margin END) -
+  MAX(CASE WHEN PERIOD = LPAD(TO_CHAR(TO_NUMBER(:period) - 1), 2, '0') THEN margin END)
+  AS gross_margin_qoq_change
+FROM pm;
+-- TODO :period='01' 跨年时上期为上年 12 月
+""" .
+
+yql:Indicator_POST_D3_03 a yql:CFOYoYChange, yql:Indicator ;
+    rdfs:label "经营现金流同比变化"@zh ;
+    skos:notation "POST-D3-03" ;
+    skos:definition """经营活动现金流的同比变化率""" ;
+    yql:hasFormula """(CFO_current - CFO_same_period_lastyear) / ABS(CFO_same_period_lastyear)""" ;
+    yql:appliedInScenario scn:PostLoanMonitoring ;
+    yql:complexityTier "A" ;
+    yql:greenThreshold ">=0%" ;
+    yql:amberThreshold "-20%-0%" ;
+    yql:redThreshold "<-20%" ;
+    yql:usesTable ncc:GL_CASHFLOWCASE, ncc:GL_VOUCHER ;
+    yql:mapsToField ncc:GL_CASHFLOWCASE__MONEY, ncc:GL_CASHFLOWCASE__PK_ACCOUNTINGBOOK, ncc:GL_CASHFLOWCASE__PK_ORG, ncc:GL_CASHFLOWCASE__PK_VOUCHER, ncc:GL_VOUCHER__PERIOD, ncc:GL_VOUCHER__PK_VOUCHER, ncc:GL_VOUCHER__YEAR ;
+    yql:hasSQL """
+-- POST-D3-03 经营现金流同比变化
+-- 公式: (本年 CFO - 上年 CFO) / ABS(上年 CFO)
+-- 数据源: GL_CASHFLOWCASE + GL_VOUCHER(GL_CASHFLOWCASE 无期间字段,需 join 凭证取期间)
+-- TODO #CF-1: PK_CASHFLOWCASE 区分"经营/投资/筹资"的编码规则?需查 BD_CASHFLOW
+WITH cfo_amount AS (
+  SELECT gv.YEAR, NVL(SUM(gc.MONEY), 0) AS amount
+  FROM GL_CASHFLOWCASE gc
+  JOIN GL_VOUCHER gv ON gc.PK_VOUCHER = gv.PK_VOUCHER
+  WHERE gc.PK_ORG = :org_id
+    AND gc.PK_ACCOUNTINGBOOK = :book_id
+    AND gv.YEAR IN (:year, :year - 1)
+    AND gv.PERIOD = :period
+    /* TODO #CF-2: 根据 PK_CASHFLOWCASE 过滤"经营活动",需 join BD_CASHFLOW 判断 */
+  GROUP BY gv.YEAR
+)
+SELECT
+  ROUND(
+    (MAX(CASE WHEN YEAR = :year THEN amount END) -
+     MAX(CASE WHEN YEAR = :year - 1 THEN amount END)) /
+    NULLIF(ABS(MAX(CASE WHEN YEAR = :year - 1 THEN amount END)), 0),
+    4
+  ) AS cfo_yoy_change
+FROM cfo_amount;
+""" .
+
+yql:Indicator_POST_D3_05 a yql:OnHandContract, yql:Indicator ;
+    rdfs:label "在手合同金额"@zh ;
+    skos:notation "POST-D3-05" ;
+    skos:definition """已签订未执行合同的累计剩余金额(订单储备)""" ;
+    yql:hasFormula """SUM(SignedContract.RemainingAmount where Status IN [Active, Pending Execution])""" ;
+    yql:appliedInScenario scn:PostLoanMonitoring ;
+    yql:complexityTier "B" ;
+    yql:greenThreshold ">=2 * AnnualRevenue" ;
+    yql:amberThreshold "1-2 * Revenue" ;
+    yql:redThreshold "<1 * Revenue" ;
+    yql:usesTable ncc:CT_SALE ;
+    yql:mapsToField ncc:CT_SALE__FSTATUSFLAG, ncc:CT_SALE__INVALLIDATE, ncc:CT_SALE__NTOTALORIGMNY, ncc:CT_SALE__PK_ORG, ncc:CT_SALE__VALDATE ;
+    yql:hasSQL """
+-- POST-D3-05 在手合同金额
+-- 执行中合同的合同总额(CT_SALE_EXEC 只有日期,无执行金额字段,只能取合同总额)
+-- TODO #CT-1: CT_SALE.FSTATUSFLAG 具体状态值?假设 =1 表示已生效
+-- TODO #CT-2: "已执行金额"无法从 CT_SALE_EXEC 直接取得(该表只有日期流水),
+--             需要 join 发票/发货表计算实际执行金额
+SELECT NVL(SUM(NTOTALORIGMNY), 0) AS on_hand_contract_amount
+FROM CT_SALE
+WHERE PK_ORG = :org_id
+  AND FSTATUSFLAG = 1
+  AND VALDATE <= :asof_date
+  AND (INVALLIDATE IS NULL OR INVALLIDATE >= :asof_date);
+""" .
+
+yql:Indicator_POST_D4_01 a yql:NonBankFinancingRatio, yql:Indicator ;
+    rdfs:label "非银融资占比变化"@zh ;
+    skos:notation "POST-D4-01" ;
+    skos:definition """非银渠道融资占比的环比变化(上升过快暗示传统银行融资受限)""" ;
+    yql:hasFormula """NonBankFinancing_Ratio_current - NonBankFinancing_Ratio_prior, where Ratio = NonBankFinancing / TotalInterestBearingDebt""" ;
+    yql:appliedInScenario scn:PostLoanMonitoring ;
+    yql:complexityTier "B" ;
+    yql:greenThreshold "<=2pp" ;
+    yql:amberThreshold "2-5pp" ;
+    yql:redThreshold ">5pp" ;
+    yql:usesTable ncc:BATM_FINANCING, ncc:BOND_CONTRACT, ncc:CDMC_CONTRACT, ncc:ICDMC_CONTRACT ;
+    yql:hasSQL """
+-- POST-D4-01 非银融资占比变化
+-- 公式: (本期非银占比) - (上期非银占比)
+-- 非银 = 非银行类融资(含债券、委托、关联借款等)
+-- 本 SQL 仅取本期快照,"变化"部分建议代理服务 2 次调用对比
+WITH all_financing AS (
+  /* 对外融资合同 */
+  SELECT BILLTYPE AS ftype, NVL(LOANMNY, 0) AS amt, DAPPROVEDATE AS dt
+  FROM CDMC_CONTRACT WHERE PK_ORG = :org_id AND DAPPROVEDATE <= :asof_date
+  UNION ALL
+  /* 内部融资合同 */
+  SELECT NULL, NVL(LOANMNY, 0), DAPPROVEDATE
+  FROM ICDMC_CONTRACT WHERE PK_ORG = :org_id AND DAPPROVEDATE <= :asof_date
+  UNION ALL
+  /* 债券 */
+  SELECT NULL, NVL(REGISTMNY, 0), ISSUESTARTDATE
+  FROM BOND_CONTRACT WHERE PK_ORG = :org_id AND ISSUESTARTDATE <= :asof_date
+  UNION ALL
+  /* 融资台账 */
+  SELECT FINANCING_WAY, NVL(BALANCE, 0), BEGINDATE
+  FROM BATM_FINANCING WHERE PK_ORG = :org_id AND BEGINDATE <= :asof_date
+)
+SELECT
+  NVL(SUM(CASE WHEN ftype NOT IN ('BANK_LOAN') THEN amt END), 0) / NULLIF(SUM(amt), 0)
+    AS non_bank_ratio
+FROM all_financing;
+-- TODO #NB-1: CDMC_CONTRACT.BILLTYPE 的"银行贷款"编码?BOND/ICDMC/BATM 默认算非银
+-- TODO #NB-2: "变化"需两期对比,请代理服务对 :asof_date 和 :asof_date - 1 月分别调用
+""" .
+
+yql:Indicator_POST_D4_03 a yql:DARChange, yql:Indicator ;
+    rdfs:label "资产负债率变化"@zh ;
+    skos:notation "POST-D4-03" ;
+    skos:definition """资产负债率的环比变化(快速攀升提示过度举债)""" ;
+    yql:hasFormula """DebtToAssetRatio_current - DebtToAssetRatio_prior""" ;
+    yql:appliedInScenario scn:PostLoanMonitoring ;
+    yql:complexityTier "B" ;
+    yql:greenThreshold "<=2pp" ;
+    yql:amberThreshold "2-5pp" ;
+    yql:redThreshold ">5pp" ;
+    yql:usesTable ncc:GL_BALANCE ;
+    yql:mapsToField ncc:GL_BALANCE__ACCOUNTCODE, ncc:GL_BALANCE__LOCALCREDITAMOUNT, ncc:GL_BALANCE__LOCALDEBITAMOUNT, ncc:GL_BALANCE__PERIOD, ncc:GL_BALANCE__PK_ACCOUNTINGBOOK, ncc:GL_BALANCE__PK_ORG, ncc:GL_BALANCE__YEAR ;
+    yql:hasSQL """
+-- POST-D4-03 资产负债率变化
+-- 公式: 本期资产负债率 - 上期
+WITH r AS (
+  SELECT
+    PERIOD AS p,
+    NVL(SUM(CASE WHEN ACCOUNTCODE LIKE '2%' AND LOCALCREDITAMOUNT > LOCALDEBITAMOUNT
+                 THEN LOCALCREDITAMOUNT - LOCALDEBITAMOUNT END), 0) /
+    NULLIF(NVL(SUM(CASE WHEN ACCOUNTCODE LIKE '1%'
+                          AND ACCOUNTCODE NOT LIKE '1231%' AND ACCOUNTCODE NOT LIKE '1407%'
+                          AND ACCOUNTCODE NOT LIKE '1471%' AND ACCOUNTCODE NOT LIKE '1602%'
+                          AND ACCOUNTCODE NOT LIKE '1702%'
+                         THEN LOCALDEBITAMOUNT - LOCALCREDITAMOUNT END), 0), 0) AS ratio
+  FROM GL_BALANCE
+  WHERE PK_ORG = :org_id AND PK_ACCOUNTINGBOOK = :book_id
+    AND YEAR = :year
+    AND PERIOD IN (:period, LPAD(TO_CHAR(TO_NUMBER(:period) - 1), 2, '0'))
+  GROUP BY PERIOD
+)
+SELECT
+  MAX(CASE WHEN p = :period THEN ratio END) -
+  MAX(CASE WHEN p = LPAD(TO_CHAR(TO_NUMBER(:period) - 1), 2, '0') THEN ratio END)
+  AS dar_change
+FROM r;
+""" .
+
+yql:Indicator_POST_D5_03 a yql:PledgedARConcentration, yql:Indicator ;
+    rdfs:label "质押应收集中度"@zh ;
+    skos:notation "POST-D5-03" ;
+    skos:definition """前 N 大买方质押应收占总质押的比例""" ;
+    yql:hasFormula """SUM(TopN_Buyer_PledgedAR) / TotalPledgedAR (默认 N=3)""" ;
+    yql:appliedInScenario scn:PostLoanMonitoring ;
+    yql:complexityTier "B" ;
+    yql:greenThreshold "<50%" ;
+    yql:amberThreshold "50-70%" ;
+    yql:redThreshold ">70%" ;
+    yql:usesTable ncc:AR_RECITEM, ncc:GPMC_GUACONTRACT, ncc:GPMC_GUAPLEINF ;
+    yql:mapsToField ncc:AR_RECITEM__BILLDATE, ncc:AR_RECITEM__CUSTOMER, ncc:AR_RECITEM__LOCAL_MONEY_BAL, ncc:AR_RECITEM__LOCAL_MONEY_DE, ncc:AR_RECITEM__PK_ORG, ncc:AR_RECITEM__PK_RECITEM, ncc:GPMC_GUACONTRACT__BUSISTATUS, ncc:GPMC_GUACONTRACT__PK_GUACONTRACT, ncc:GPMC_GUAPLEINF__PK_GUACONTRACT, ncc:GPMC_GUAPLEINF__PK_SRCBILLROWID ;
+    yql:hasSQL """
+-- POST-D5-03 质押应收集中度(前3大质押应收客户占比)
+-- 数据源: AR_RECITEM + BD_CUSTOMER + GPMC_GUACONTRACT + GPMC_GUAPLEINF
+-- TODO #PL-1: GPMC_GUAPLEINF 与 AR_RECITEM 的关联字段?GUAPLEINF 有 PK_SRCBILL/PK_SRCBILLROWID,
+--             需要 PK_SRCBILLROWID = AR_RECITEM.PK_RECITEM 且 PK_SRCBILLTYPEID = AR 单据类型
+-- TODO #PL-2: 合同状态字段为 BUSISTATUS(数值)或 VBILLSTATUS(字符),枚举未知
+WITH pledged_ar AS (
+  SELECT ri.CUSTOMER, SUM(ri.LOCAL_MONEY_DE - ri.LOCAL_MONEY_BAL) AS amt
+  FROM AR_RECITEM ri
+  JOIN GPMC_GUAPLEINF gi ON gi.PK_SRCBILLROWID = ri.PK_RECITEM
+  JOIN GPMC_GUACONTRACT gc ON gi.PK_GUACONTRACT = gc.PK_GUACONTRACT
+  WHERE ri.PK_ORG = :org_id
+    AND ri.BILLDATE <= LAST_DAY(TO_DATE(:year||'-'||:period||'-01','YYYY-MM-DD'))
+    AND gc.BUSISTATUS = 1
+  GROUP BY ri.CUSTOMER
+),
+top3 AS (SELECT CUSTOMER, amt FROM pledged_ar ORDER BY amt DESC FETCH FIRST 3 ROWS ONLY),
+total AS (SELECT NVL(SUM(amt),0) AS amt FROM pledged_ar)
+SELECT ROUND((SELECT NVL(SUM(amt),0) FROM top3) / NULLIF(total.amt, 0), 4)
+  AS pledged_ar_concentration
+FROM total;
+""" .
+
+yql:Indicator_PRE_D1_01 a yql:QuickRatio, yql:Indicator ;
+    rdfs:label "速动比率"@zh ;
+    skos:notation "PRE-D1-01" ;
+    skos:definition """衡量企业立即变现资产偿付短期债务能力的稳健性指标""" ;
+    yql:hasFormula """(CurrentAssets - Inventory - PrepaidExpenses) / CurrentLiabilities""" ;
+    yql:appliedInScenario scn:PreLoanDD ;
+    yql:complexityTier "B" ;
+    yql:greenThreshold ">=1.0" ;
+    yql:amberThreshold "0.7-1.0" ;
+    yql:redThreshold "<0.7" ;
+    yql:usesTable ncc:GL_BALANCE ;
+    yql:mapsToField ncc:GL_BALANCE__ACCOUNTCODE, ncc:GL_BALANCE__CREDITAMOUNT, ncc:GL_BALANCE__LOCALCREDITAMOUNT, ncc:GL_BALANCE__LOCALDEBITAMOUNT, ncc:GL_BALANCE__PERIOD, ncc:GL_BALANCE__PK_ACCOUNTINGBOOK, ncc:GL_BALANCE__PK_ORG, ncc:GL_BALANCE__YEAR ;
+    yql:hasSQL """
+-- PRE-D1-01 速动比率
+-- 公式: (流动资产 - 存货 - 预付账款) / 流动负债
+-- 数据源: GL_BALANCE + BD_ACCOUNT
+-- 按客户提供的"流动资产完整规则"计算
+-- TODO #GL-1: LOCALDEBITAMOUNT/CREDITAMOUNT 为累计余额(贵司确认为默认口径)
+-- TODO #GL-2: GL_BALANCE 仅存末级明细(贵司确认的默认口径)
+WITH bal AS (
+  SELECT ACCOUNTCODE,
+         SUM(LOCALDEBITAMOUNT - LOCALCREDITAMOUNT) AS net_debit_bal,
+         SUM(LOCALCREDITAMOUNT - LOCALDEBITAMOUNT) AS net_credit_bal
+  FROM GL_BALANCE
+  WHERE PK_ORG = :org_id AND PK_ACCOUNTINGBOOK = :book_id
+    AND YEAR = :year AND PERIOD = :period
+  GROUP BY ACCOUNTCODE
+)
+SELECT
+  ROUND(
+    (/* 流动资产(按客户规则)*/
+NVL((SELECT SUM(net_debit_bal) FROM bal WHERE ACCOUNTCODE LIKE '1001%'
+     OR ACCOUNTCODE LIKE '1002%' OR ACCOUNTCODE LIKE '1012%'
+     OR ACCOUNTCODE LIKE '1101%' OR ACCOUNTCODE LIKE '1121%'
+     OR ACCOUNTCODE LIKE '1122%' OR ACCOUNTCODE LIKE '1123%'
+     OR ACCOUNTCODE LIKE '1131%' OR ACCOUNTCODE LIKE '1132%'
+     OR ACCOUNTCODE LIKE '1221%' OR ACCOUNTCODE LIKE '1401%'
+     OR ACCOUNTCODE LIKE '1402%' OR ACCOUNTCODE LIKE '1403%'
+     OR ACCOUNTCODE LIKE '1404%' OR ACCOUNTCODE LIKE '1405%'
+     OR ACCOUNTCODE LIKE '1406%' OR ACCOUNTCODE LIKE '1408%'
+     OR ACCOUNTCODE LIKE '1411%' OR ACCOUNTCODE LIKE '1125%'
+     OR ACCOUNTCODE LIKE '1126%'), 0)
+- NVL((SELECT SUM(ABS(net_debit_bal)) FROM bal WHERE ACCOUNTCODE LIKE '1231%'
+     OR ACCOUNTCODE LIKE '1407%' OR ACCOUNTCODE LIKE '1471%'), 0)
++ NVL((SELECT SUM(net_debit_bal) FROM bal WHERE ACCOUNTCODE LIKE '3101%' AND net_debit_bal > 0), 0)
++ NVL((SELECT SUM(net_debit_bal) FROM bal WHERE ACCOUNTCODE LIKE '2221%' AND net_debit_bal > 0), 0)
+    -
+    /* 存货(按客户规则)*/
+NVL((SELECT SUM(net_debit_bal) FROM bal WHERE ACCOUNTCODE LIKE '1401%'
+     OR ACCOUNTCODE LIKE '1402%' OR ACCOUNTCODE LIKE '1403%' OR ACCOUNTCODE LIKE '1405%'
+     OR ACCOUNTCODE LIKE '1406%' OR ACCOUNTCODE LIKE '1408%' OR ACCOUNTCODE LIKE '1411%'
+     OR ACCOUNTCODE LIKE '1125%' OR ACCOUNTCODE LIKE '1126%'), 0)
++ NVL((SELECT SUM(net_debit_bal) FROM bal WHERE ACCOUNTCODE LIKE '1404%'), 0)
+- NVL((SELECT SUM(ABS(net_debit_bal)) FROM bal WHERE ACCOUNTCODE LIKE '1407%' OR ACCOUNTCODE LIKE '1471%'), 0)
+    -
+    NVL((SELECT SUM(net_debit_bal) FROM bal WHERE ACCOUNTCODE LIKE '1123%'), 0)
+    ) /
+    NULLIF(/* 流动负债 */
+NVL((SELECT SUM(ABS(net_debit_bal)) FROM bal WHERE ACCOUNTCODE LIKE '2001%'
+     OR ACCOUNTCODE LIKE '2101%' OR ACCOUNTCODE LIKE '2201%' OR ACCOUNTCODE LIKE '2202%'
+     OR ACCOUNTCODE LIKE '2203%' OR ACCOUNTCODE LIKE '2204%' OR ACCOUNTCODE LIKE '2211%'
+     OR ACCOUNTCODE LIKE '2241%'), 0)
++ NVL((SELECT SUM(ABS(net_debit_bal)) FROM bal WHERE ACCOUNTCODE LIKE '2221%' AND net_debit_bal < 0), 0), 0),
+    4
+  ) AS quick_ratio
+FROM dual;
+-- TODO #CA-1: [1124] 流动部分需按到期日拆分
+-- TODO #CA-2: 一年内到期非流动资产需 join CDMC/BOND 合同表
+-- TODO #CA-3: 2202 供应商借方重分类到预付;1122 客户贷方重分类到流动负债
+""" .
+
+yql:Indicator_PRE_D1_02 a yql:CurrentRatio, yql:Indicator ;
+    rdfs:label "流动比率"@zh ;
+    skos:notation "PRE-D1-02" ;
+    skos:definition """短期偿债能力基础指标""" ;
+    yql:hasFormula """CurrentAssets / CurrentLiabilities""" ;
+    yql:appliedInScenario scn:PreLoanDD ;
+    yql:complexityTier "B" ;
+    yql:greenThreshold ">=2.0" ;
+    yql:amberThreshold "1.0-2.0" ;
+    yql:redThreshold "<1.0" ;
+    yql:usesTable ncc:GL_BALANCE ;
+    yql:mapsToField ncc:GL_BALANCE__ACCOUNTCODE, ncc:GL_BALANCE__LOCALCREDITAMOUNT, ncc:GL_BALANCE__LOCALDEBITAMOUNT, ncc:GL_BALANCE__PERIOD, ncc:GL_BALANCE__PK_ACCOUNTINGBOOK, ncc:GL_BALANCE__PK_ORG, ncc:GL_BALANCE__YEAR ;
+    yql:hasSQL """
+-- PRE-D1-02 流动比率
+-- 公式: 流动资产 / 流动负债
+WITH bal AS (
+  SELECT ACCOUNTCODE,
+         SUM(LOCALDEBITAMOUNT - LOCALCREDITAMOUNT) AS net_debit_bal,
+         SUM(LOCALCREDITAMOUNT - LOCALDEBITAMOUNT) AS net_credit_bal
+  FROM GL_BALANCE
+  WHERE PK_ORG = :org_id AND PK_ACCOUNTINGBOOK = :book_id
+    AND YEAR = :year AND PERIOD = :period
+  GROUP BY ACCOUNTCODE
+)
+SELECT
+  ROUND(
+    (/* 流动资产(按客户规则)*/
+NVL((SELECT SUM(net_debit_bal) FROM bal WHERE ACCOUNTCODE LIKE '1001%'
+     OR ACCOUNTCODE LIKE '1002%' OR ACCOUNTCODE LIKE '1012%'
+     OR ACCOUNTCODE LIKE '1101%' OR ACCOUNTCODE LIKE '1121%'
+     OR ACCOUNTCODE LIKE '1122%' OR ACCOUNTCODE LIKE '1123%'
+     OR ACCOUNTCODE LIKE '1131%' OR ACCOUNTCODE LIKE '1132%'
+     OR ACCOUNTCODE LIKE '1221%' OR ACCOUNTCODE LIKE '1401%'
+     OR ACCOUNTCODE LIKE '1402%' OR ACCOUNTCODE LIKE '1403%'
+     OR ACCOUNTCODE LIKE '1404%' OR ACCOUNTCODE LIKE '1405%'
+     OR ACCOUNTCODE LIKE '1406%' OR ACCOUNTCODE LIKE '1408%'
+     OR ACCOUNTCODE LIKE '1411%' OR ACCOUNTCODE LIKE '1125%'
+     OR ACCOUNTCODE LIKE '1126%'), 0)
+- NVL((SELECT SUM(ABS(net_debit_bal)) FROM bal WHERE ACCOUNTCODE LIKE '1231%'
+     OR ACCOUNTCODE LIKE '1407%' OR ACCOUNTCODE LIKE '1471%'), 0)
++ NVL((SELECT SUM(net_debit_bal) FROM bal WHERE ACCOUNTCODE LIKE '3101%' AND net_debit_bal > 0), 0)
++ NVL((SELECT SUM(net_debit_bal) FROM bal WHERE ACCOUNTCODE LIKE '2221%' AND net_debit_bal > 0), 0)) /
+    NULLIF(/* 流动负债 */
+NVL((SELECT SUM(ABS(net_debit_bal)) FROM bal WHERE ACCOUNTCODE LIKE '2001%'
+     OR ACCOUNTCODE LIKE '2101%' OR ACCOUNTCODE LIKE '2201%' OR ACCOUNTCODE LIKE '2202%'
+     OR ACCOUNTCODE LIKE '2203%' OR ACCOUNTCODE LIKE '2204%' OR ACCOUNTCODE LIKE '2211%'
+     OR ACCOUNTCODE LIKE '2241%'), 0)
++ NVL((SELECT SUM(ABS(net_debit_bal)) FROM bal WHERE ACCOUNTCODE LIKE '2221%' AND net_debit_bal < 0), 0), 0),
+    4
+  ) AS current_ratio
+FROM dual;
+-- TODO 同 PRE-D1-01
+""" .
+
+yql:Indicator_PRE_D1_03 a yql:InterestCoverageRatio, yql:Indicator ;
+    rdfs:label "利息覆盖倍数 ICR"@zh ;
+    skos:notation "PRE-D1-03" ;
+    skos:definition """营业利润对利息费用的保障倍数""" ;
+    yql:hasFormula """EBIT / InterestExpense, where EBIT = NetIncome + InterestExpense + IncomeTax""" ;
+    yql:appliedInScenario scn:PreLoanDD ;
+    yql:complexityTier "B" ;
+    yql:greenThreshold ">=3.0" ;
+    yql:amberThreshold "1.5-3.0" ;
+    yql:redThreshold "<1.5" ;
+    yql:usesTable ncc:GL_BALANCE ;
+    yql:mapsToField ncc:GL_BALANCE__ACCOUNTCODE, ncc:GL_BALANCE__LOCALCREDITAMOUNT, ncc:GL_BALANCE__LOCALDEBITAMOUNT, ncc:GL_BALANCE__PERIOD, ncc:GL_BALANCE__PK_ACCOUNTINGBOOK, ncc:GL_BALANCE__PK_ORG, ncc:GL_BALANCE__YEAR ;
+    yql:hasSQL """
+-- PRE-D1-03 利息覆盖倍数 ICR
+-- 公式: EBIT / 利息费用 = (净利润 + 利息费用 + 所得税) / 利息费用
+-- 利息费用:默认取 6603(财务费用),精确口径应取 6603 下利息子科目
+WITH bal AS (
+  SELECT ACCOUNTCODE,
+         SUM(LOCALDEBITAMOUNT - LOCALCREDITAMOUNT) AS net_debit_bal,
+         SUM(LOCALCREDITAMOUNT - LOCALDEBITAMOUNT) AS net_credit_bal
+  FROM GL_BALANCE
+  WHERE PK_ORG = :org_id AND PK_ACCOUNTINGBOOK = :book_id
+    AND YEAR = :year AND PERIOD = :period
+  GROUP BY ACCOUNTCODE
+)
+, pnl AS (
+  SELECT
+    NVL(SUM(CASE WHEN ACCOUNTCODE LIKE '6001%' OR ACCOUNTCODE LIKE '6051%' THEN net_credit_bal END), 0) AS revenue,
+    NVL(SUM(CASE WHEN ACCOUNTCODE LIKE '6401%' OR ACCOUNTCODE LIKE '6402%' THEN net_debit_bal END), 0) AS cogs,
+    NVL(SUM(CASE WHEN ACCOUNTCODE LIKE '6403%' OR ACCOUNTCODE LIKE '6601%'
+                   OR ACCOUNTCODE LIKE '6602%' OR ACCOUNTCODE LIKE '6604%' THEN net_debit_bal END), 0) AS op_exp,
+    NVL(SUM(CASE WHEN ACCOUNTCODE LIKE '6603%' THEN net_debit_bal END), 0) AS fin_exp,
+    NVL(SUM(CASE WHEN ACCOUNTCODE LIKE '6701%' OR ACCOUNTCODE LIKE '6702%' THEN net_debit_bal END), 0) AS impair,
+    NVL(SUM(CASE WHEN ACCOUNTCODE LIKE '6111%' OR ACCOUNTCODE LIKE '6117%'
+                   OR ACCOUNTCODE LIKE '6301%' THEN net_credit_bal END), 0) AS other_income,
+    NVL(SUM(CASE WHEN ACCOUNTCODE LIKE '6711%' THEN net_debit_bal END), 0) AS non_op_exp,
+    NVL(SUM(CASE WHEN ACCOUNTCODE LIKE '6801%' THEN net_debit_bal END), 0) AS income_tax
+  FROM bal
+)
+SELECT ROUND(
+  ((revenue - cogs - op_exp - fin_exp - impair + other_income - non_op_exp - income_tax) + fin_exp + income_tax)
+  / NULLIF(fin_exp, 0), 4
+) AS interest_coverage_ratio
+FROM pnl;
+-- TODO #IC-1: 利息费用精确口径需取 6603 下"利息支出"子科目(需查 GL_DETAIL)
+""" .
+
+yql:Indicator_PRE_D1_06 a yql:CashCoverageDays, yql:Indicator ;
+    rdfs:label "现金覆盖天数"@zh ;
+    skos:notation "PRE-D1-06" ;
+    skos:definition """现金及等价物可支撑日常经营运转的天数(已剔除折摊等非现金成本)""" ;
+    yql:hasFormula """CashAndEquivalents / ((TotalOperatingCost - DepreciationAmortization) / 365)""" ;
+    yql:appliedInScenario scn:PreLoanDD ;
+    yql:complexityTier "B" ;
+    yql:greenThreshold ">=30" ;
+    yql:amberThreshold "15-30" ;
+    yql:redThreshold "<15" ;
+    yql:usesTable ncc:GL_BALANCE ;
+    yql:mapsToField ncc:GL_BALANCE__ACCOUNTCODE, ncc:GL_BALANCE__LOCALCREDITAMOUNT, ncc:GL_BALANCE__LOCALDEBITAMOUNT, ncc:GL_BALANCE__PERIOD, ncc:GL_BALANCE__PK_ACCOUNTINGBOOK, ncc:GL_BALANCE__PK_ORG, ncc:GL_BALANCE__YEAR ;
+    yql:hasSQL """
+-- PRE-D1-06 现金覆盖天数
+-- 公式: 货币资金 / 日均现金支出
+-- 日均现金支出 = (营业成本 + 期间费用 - 折旧摊销) / 365
+WITH bal AS (
+  SELECT ACCOUNTCODE,
+         SUM(LOCALDEBITAMOUNT - LOCALCREDITAMOUNT) AS net_debit_bal,
+         SUM(LOCALCREDITAMOUNT - LOCALDEBITAMOUNT) AS net_credit_bal
+  FROM GL_BALANCE
+  WHERE PK_ORG = :org_id AND PK_ACCOUNTINGBOOK = :book_id
+    AND YEAR = :year AND PERIOD = :period
+  GROUP BY ACCOUNTCODE
+)
+SELECT ROUND(
+  NVL((SELECT SUM(net_debit_bal) FROM bal WHERE ACCOUNTCODE LIKE '1001%'
+       OR ACCOUNTCODE LIKE '1002%' OR ACCOUNTCODE LIKE '1012%'), 0)
+  /
+  NULLIF(
+    (NVL((SELECT SUM(net_debit_bal) FROM bal WHERE ACCOUNTCODE LIKE '6401%'
+          OR ACCOUNTCODE LIKE '6402%' OR ACCOUNTCODE LIKE '6403%'
+          OR ACCOUNTCODE LIKE '6601%' OR ACCOUNTCODE LIKE '6602%'
+          OR ACCOUNTCODE LIKE '6603%' OR ACCOUNTCODE LIKE '6604%'), 0)
+    - NVL((SELECT SUM(net_credit_bal) FROM bal
+           WHERE ACCOUNTCODE LIKE '1602%' OR ACCOUNTCODE LIKE '1702%'), 0)
+    ) / 365, 0),
+  2
+) AS cash_coverage_days
+FROM dual;
+-- TODO #CCD-1: 折旧摊销用 1602(累计折旧)+1702(累计摊销)贷方发生额近似
+""" .
+
+yql:Indicator_PRE_D2_01 a yql:EBITDAMargin, yql:Indicator ;
+    rdfs:label "EBITDA利润率"@zh ;
+    skos:notation "PRE-D2-01" ;
+    skos:definition """剔除融资和折摊影响的核心经营利润率""" ;
+    yql:hasFormula """EBITDA / Revenue""" ;
+    yql:appliedInScenario scn:PreLoanDD ;
+    yql:complexityTier "B" ;
+    yql:greenThreshold ">=15%" ;
+    yql:amberThreshold "5-15%" ;
+    yql:redThreshold "<5%" ;
+    yql:usesTable ncc:GL_BALANCE ;
+    yql:mapsToField ncc:GL_BALANCE__ACCOUNTCODE, ncc:GL_BALANCE__LOCALCREDITAMOUNT, ncc:GL_BALANCE__LOCALDEBITAMOUNT, ncc:GL_BALANCE__PERIOD, ncc:GL_BALANCE__PK_ACCOUNTINGBOOK, ncc:GL_BALANCE__PK_ORG, ncc:GL_BALANCE__YEAR ;
+    yql:hasSQL """
+-- PRE-D2-01 EBITDA 利润率
+-- EBITDA = 净利润 + 所得税 + 利息费用 + 折旧摊销
+WITH bal AS (
+  SELECT ACCOUNTCODE,
+         SUM(LOCALDEBITAMOUNT - LOCALCREDITAMOUNT) AS net_debit_bal,
+         SUM(LOCALCREDITAMOUNT - LOCALDEBITAMOUNT) AS net_credit_bal
+  FROM GL_BALANCE
+  WHERE PK_ORG = :org_id AND PK_ACCOUNTINGBOOK = :book_id
+    AND YEAR = :year AND PERIOD = :period
+  GROUP BY ACCOUNTCODE
+)
+, pnl AS (
+  SELECT
+    NVL(SUM(CASE WHEN ACCOUNTCODE LIKE '6001%' OR ACCOUNTCODE LIKE '6051%' THEN net_credit_bal END), 0) AS revenue,
+    NVL(SUM(CASE WHEN ACCOUNTCODE LIKE '6401%' OR ACCOUNTCODE LIKE '6402%' THEN net_debit_bal END), 0) AS cogs,
+    NVL(SUM(CASE WHEN ACCOUNTCODE LIKE '6403%' OR ACCOUNTCODE LIKE '6601%'
+                   OR ACCOUNTCODE LIKE '6602%' OR ACCOUNTCODE LIKE '6604%' THEN net_debit_bal END), 0) AS op_exp,
+    NVL(SUM(CASE WHEN ACCOUNTCODE LIKE '6701%' OR ACCOUNTCODE LIKE '6702%' THEN net_debit_bal END), 0) AS impair,
+    NVL(SUM(CASE WHEN ACCOUNTCODE LIKE '6111%' OR ACCOUNTCODE LIKE '6117%'
+                   OR ACCOUNTCODE LIKE '6301%' THEN net_credit_bal END), 0) AS other_income,
+    NVL(SUM(CASE WHEN ACCOUNTCODE LIKE '6711%' THEN net_debit_bal END), 0) AS non_op_exp,
+    NVL(SUM(CASE WHEN ACCOUNTCODE LIKE '1602%' OR ACCOUNTCODE LIKE '1702%' THEN net_credit_bal END), 0) AS da
+  FROM bal
+)
+SELECT ROUND(
+  (revenue - cogs - op_exp - impair + other_income - non_op_exp + da)
+  / NULLIF(revenue, 0), 4
+) AS ebitda_margin
+FROM pnl;
+""" .
+
+yql:Indicator_PRE_D2_02 a yql:CFOtoNIRatio, yql:Indicator ;
+    rdfs:label "现金流/净利润比"@zh ;
+    skos:notation "PRE-D2-02" ;
+    skos:definition """利润含金量;持续<1 提示利润被应收/存货占用""" ;
+    yql:hasFormula """OperatingCashFlow / NetIncome""" ;
+    yql:appliedInScenario scn:PreLoanDD ;
+    yql:complexityTier "B" ;
+    yql:greenThreshold ">=1.0" ;
+    yql:amberThreshold "0.7-1.0" ;
+    yql:redThreshold "<0.7" ;
+    yql:usesTable ncc:GL_BALANCE, ncc:GL_CASHFLOWCASE, ncc:GL_VOUCHER ;
+    yql:mapsToField ncc:GL_CASHFLOWCASE__MONEY, ncc:GL_CASHFLOWCASE__PK_ACCOUNTINGBOOK, ncc:GL_CASHFLOWCASE__PK_ORG, ncc:GL_CASHFLOWCASE__PK_VOUCHER, ncc:GL_VOUCHER__PERIOD, ncc:GL_VOUCHER__PK_VOUCHER, ncc:GL_VOUCHER__YEAR ;
+    yql:hasSQL """
+-- PRE-D2-02 经营现金流 / 净利润比
+-- 公式: CFO / 净利润
+WITH bal AS (
+  SELECT ACCOUNTCODE,
+         SUM(LOCALDEBITAMOUNT - LOCALCREDITAMOUNT) AS net_debit_bal,
+         SUM(LOCALCREDITAMOUNT - LOCALDEBITAMOUNT) AS net_credit_bal
+  FROM GL_BALANCE
+  WHERE PK_ORG = :org_id AND PK_ACCOUNTINGBOOK = :book_id
+    AND YEAR = :year AND PERIOD = :period
+  GROUP BY ACCOUNTCODE
+)
+, cfo AS (
+  SELECT NVL(SUM(gc.MONEY), 0) AS amount
+  FROM GL_CASHFLOWCASE gc
+  JOIN GL_VOUCHER gv ON gc.PK_VOUCHER = gv.PK_VOUCHER
+  WHERE gc.PK_ORG = :org_id AND gc.PK_ACCOUNTINGBOOK = :book_id
+    AND gv.YEAR = :year AND gv.PERIOD = :period
+  /* TODO #CF-2: PK_CASHFLOWCASE 经营活动识别 */
+),
+ni AS (
+  SELECT
+    (NVL(SUM(CASE WHEN ACCOUNTCODE LIKE '6001%' OR ACCOUNTCODE LIKE '6051%' THEN net_credit_bal END), 0)
+   - NVL(SUM(CASE WHEN ACCOUNTCODE LIKE '6401%' OR ACCOUNTCODE LIKE '6402%'
+                    OR ACCOUNTCODE LIKE '6403%' OR ACCOUNTCODE LIKE '6601%'
+                    OR ACCOUNTCODE LIKE '6602%' OR ACCOUNTCODE LIKE '6603%'
+                    OR ACCOUNTCODE LIKE '6604%' OR ACCOUNTCODE LIKE '6701%'
+                    OR ACCOUNTCODE LIKE '6702%' OR ACCOUNTCODE LIKE '6711%'
+                    OR ACCOUNTCODE LIKE '6801%' THEN net_debit_bal END), 0)
+   + NVL(SUM(CASE WHEN ACCOUNTCODE LIKE '6111%' OR ACCOUNTCODE LIKE '6117%'
+                    OR ACCOUNTCODE LIKE '6301%' THEN net_credit_bal END), 0)
+    ) AS amount
+  FROM bal
+)
+SELECT ROUND(cfo.amount / NULLIF(ni.amount, 0), 4) AS cfo_to_ni_ratio
+FROM cfo, ni;
+""" .
+
+yql:Indicator_PRE_D2_04 a yql:GrossMargin, yql:Indicator ;
+    rdfs:label "毛利率"@zh ;
+    skos:notation "PRE-D2-04" ;
+    skos:definition """主营业务的初步盈利能力""" ;
+    yql:hasFormula """(Revenue - COGS) / Revenue""" ;
+    yql:appliedInScenario scn:PreLoanDD ;
+    yql:complexityTier "B" ;
+    yql:greenThreshold ">=25%" ;
+    yql:amberThreshold "10-25%" ;
+    yql:redThreshold "<10%" ;
+    yql:usesTable ncc:GL_BALANCE ;
+    yql:mapsToField ncc:GL_BALANCE__ACCOUNTCODE, ncc:GL_BALANCE__LOCALCREDITAMOUNT, ncc:GL_BALANCE__LOCALDEBITAMOUNT, ncc:GL_BALANCE__PERIOD, ncc:GL_BALANCE__PK_ACCOUNTINGBOOK, ncc:GL_BALANCE__PK_ORG, ncc:GL_BALANCE__YEAR ;
+    yql:hasSQL """
+-- PRE-D2-04 毛利率
+WITH bal AS (
+  SELECT ACCOUNTCODE,
+         SUM(LOCALDEBITAMOUNT - LOCALCREDITAMOUNT) AS net_debit_bal,
+         SUM(LOCALCREDITAMOUNT - LOCALDEBITAMOUNT) AS net_credit_bal
+  FROM GL_BALANCE
+  WHERE PK_ORG = :org_id AND PK_ACCOUNTINGBOOK = :book_id
+    AND YEAR = :year AND PERIOD = :period
+  GROUP BY ACCOUNTCODE
+)
+SELECT ROUND(
+  (NVL(SUM(CASE WHEN ACCOUNTCODE LIKE '6001%' OR ACCOUNTCODE LIKE '6051%' THEN net_credit_bal END), 0)
+ - NVL(SUM(CASE WHEN ACCOUNTCODE LIKE '6401%' OR ACCOUNTCODE LIKE '6402%' THEN net_debit_bal END), 0)) /
+  NULLIF(NVL(SUM(CASE WHEN ACCOUNTCODE LIKE '6001%' OR ACCOUNTCODE LIKE '6051%' THEN net_credit_bal END), 0), 0),
+  4
+) AS gross_margin
+FROM bal;
+""" .
+
+yql:Indicator_PRE_D2_05 a yql:NetProfitMargin, yql:Indicator ;
+    rdfs:label "净利润率"@zh ;
+    skos:notation "PRE-D2-05" ;
+    skos:definition """扣除全部成本费用税金后的最终盈利能力""" ;
+    yql:hasFormula """NetIncome / Revenue""" ;
+    yql:appliedInScenario scn:PreLoanDD ;
+    yql:complexityTier "B" ;
+    yql:greenThreshold ">=8%" ;
+    yql:amberThreshold "3-8%" ;
+    yql:redThreshold "<3%" ;
+    yql:usesTable ncc:GL_BALANCE ;
+    yql:mapsToField ncc:GL_BALANCE__ACCOUNTCODE, ncc:GL_BALANCE__LOCALCREDITAMOUNT, ncc:GL_BALANCE__LOCALDEBITAMOUNT, ncc:GL_BALANCE__PERIOD, ncc:GL_BALANCE__PK_ACCOUNTINGBOOK, ncc:GL_BALANCE__PK_ORG, ncc:GL_BALANCE__YEAR ;
+    yql:hasSQL """
+-- PRE-D2-05 净利润率
+WITH bal AS (
+  SELECT ACCOUNTCODE,
+         SUM(LOCALDEBITAMOUNT - LOCALCREDITAMOUNT) AS net_debit_bal,
+         SUM(LOCALCREDITAMOUNT - LOCALDEBITAMOUNT) AS net_credit_bal
+  FROM GL_BALANCE
+  WHERE PK_ORG = :org_id AND PK_ACCOUNTINGBOOK = :book_id
+    AND YEAR = :year AND PERIOD = :period
+  GROUP BY ACCOUNTCODE
+)
+, pnl AS (
+  SELECT
+    NVL(SUM(CASE WHEN ACCOUNTCODE LIKE '6001%' OR ACCOUNTCODE LIKE '6051%' THEN net_credit_bal END), 0) AS revenue,
+    (NVL(SUM(CASE WHEN ACCOUNTCODE LIKE '6001%' OR ACCOUNTCODE LIKE '6051%' THEN net_credit_bal END), 0)
+   - NVL(SUM(CASE WHEN ACCOUNTCODE LIKE '6401%' OR ACCOUNTCODE LIKE '6402%'
+                    OR ACCOUNTCODE LIKE '6403%' OR ACCOUNTCODE LIKE '6601%'
+                    OR ACCOUNTCODE LIKE '6602%' OR ACCOUNTCODE LIKE '6603%'
+                    OR ACCOUNTCODE LIKE '6604%' OR ACCOUNTCODE LIKE '6701%'
+                    OR ACCOUNTCODE LIKE '6702%' OR ACCOUNTCODE LIKE '6711%'
+                    OR ACCOUNTCODE LIKE '6801%' THEN net_debit_bal END), 0)
+   + NVL(SUM(CASE WHEN ACCOUNTCODE LIKE '6111%' OR ACCOUNTCODE LIKE '6117%'
+                    OR ACCOUNTCODE LIKE '6301%' THEN net_credit_bal END), 0)
+    ) AS net_income
+  FROM bal
+)
+SELECT ROUND(net_income / NULLIF(revenue, 0), 4) AS net_profit_margin FROM pnl;
+""" .
+
+yql:Indicator_PRE_D3_03 a yql:DebtToAssetRatio, yql:Indicator ;
+    rdfs:label "资产负债率"@zh ;
+    skos:notation "PRE-D3-03" ;
+    skos:definition """企业总杠杆水平""" ;
+    yql:hasFormula """TotalLiabilities / TotalAssets""" ;
+    yql:appliedInScenario scn:PreLoanDD ;
+    yql:complexityTier "B" ;
+    yql:greenThreshold "<60%" ;
+    yql:amberThreshold "60-70%" ;
+    yql:redThreshold ">70%" ;
+    yql:usesTable ncc:GL_BALANCE ;
+    yql:mapsToField ncc:GL_BALANCE__ACCOUNTCODE, ncc:GL_BALANCE__LOCALCREDITAMOUNT, ncc:GL_BALANCE__LOCALDEBITAMOUNT, ncc:GL_BALANCE__PERIOD, ncc:GL_BALANCE__PK_ACCOUNTINGBOOK, ncc:GL_BALANCE__PK_ORG, ncc:GL_BALANCE__YEAR ;
+    yql:hasSQL """
+-- PRE-D3-03 资产负债率
+-- 公式: 总负债 / 总资产
+WITH bal AS (
+  SELECT ACCOUNTCODE,
+         SUM(LOCALDEBITAMOUNT - LOCALCREDITAMOUNT) AS net_debit_bal,
+         SUM(LOCALCREDITAMOUNT - LOCALDEBITAMOUNT) AS net_credit_bal
+  FROM GL_BALANCE
+  WHERE PK_ORG = :org_id AND PK_ACCOUNTINGBOOK = :book_id
+    AND YEAR = :year AND PERIOD = :period
+  GROUP BY ACCOUNTCODE
+)
+SELECT ROUND(
+  /* 总负债 = 2xxx 贷方余额 */
+  NVL((SELECT SUM(ABS(net_debit_bal)) FROM bal WHERE ACCOUNTCODE LIKE '2%' AND net_debit_bal < 0), 0)
+  /
+  NULLIF(
+    /* 总资产 = 1xxx 借方净余额 - 坏账/跌价/商品差价(这些是减项)*/
+    (NVL((SELECT SUM(net_debit_bal) FROM bal WHERE ACCOUNTCODE LIKE '1%'
+          AND ACCOUNTCODE NOT LIKE '1231%' AND ACCOUNTCODE NOT LIKE '1407%'
+          AND ACCOUNTCODE NOT LIKE '1471%' AND ACCOUNTCODE NOT LIKE '1602%'
+          AND ACCOUNTCODE NOT LIKE '1702%'), 0)
+    - NVL((SELECT SUM(ABS(net_debit_bal)) FROM bal
+           WHERE ACCOUNTCODE LIKE '1231%' OR ACCOUNTCODE LIKE '1407%'
+              OR ACCOUNTCODE LIKE '1471%'), 0)), 0),
+  4
+) AS debt_to_asset_ratio FROM dual;
+""" .
+
+yql:Indicator_PRE_D3_04 a yql:EffectiveNetAssets, yql:Indicator ;
+    rdfs:label "有效净资产"@zh ;
+    skos:notation "PRE-D3-04" ;
+    skos:definition """剔除虚资产和关联方应收后的可变现净资产口径""" ;
+    yql:hasFormula """StockholdersEquity - IntangibleAssets - Goodwill - LongTermDeferredExpenses - DeferredTaxAssets - RelatedPartyAR""" ;
+    yql:appliedInScenario scn:PreLoanDD ;
+    yql:complexityTier "B" ;
+    yql:usesTable ncc:AR_RECITEM, ncc:BD_CUSTOMER, ncc:GL_BALANCE ;
+    yql:mapsToField ncc:AR_RECITEM__BILLDATE, ncc:AR_RECITEM__CUSTOMER, ncc:AR_RECITEM__LOCAL_MONEY_BAL, ncc:AR_RECITEM__LOCAL_MONEY_DE, ncc:AR_RECITEM__PK_ORG, ncc:BD_CUSTOMER__INNERPROFITCENTER, ncc:BD_CUSTOMER__PK_CUSTOMER ;
+    yql:hasSQL """
+-- PRE-D3-04 有效净资产
+-- 公式: 所有者权益 - 无形资产 - 商誉 - 长期待摊 - 递延税 - 关联方应收
+-- TODO #RP-1: 关联方识别:BD_CUSTOMER 无专用"关联方"字段,默认用 DEF1='1' 或 INNERPROFITCENTER='Y'
+WITH bal AS (
+  SELECT ACCOUNTCODE,
+         SUM(LOCALDEBITAMOUNT - LOCALCREDITAMOUNT) AS net_debit_bal,
+         SUM(LOCALCREDITAMOUNT - LOCALDEBITAMOUNT) AS net_credit_bal
+  FROM GL_BALANCE
+  WHERE PK_ORG = :org_id AND PK_ACCOUNTINGBOOK = :book_id
+    AND YEAR = :year AND PERIOD = :period
+  GROUP BY ACCOUNTCODE
+)
+, related_ar AS (
+  SELECT NVL(SUM(ri.LOCAL_MONEY_DE - ri.LOCAL_MONEY_BAL), 0) AS amount
+  FROM AR_RECITEM ri
+  JOIN BD_CUSTOMER c ON ri.CUSTOMER = c.PK_CUSTOMER
+  WHERE ri.PK_ORG = :org_id
+    AND ri.BILLDATE <= LAST_DAY(TO_DATE(:year || '-' || :period || '-01', 'YYYY-MM-DD'))
+    AND c.INNERPROFITCENTER = 'Y'
+    /* TODO #RP-1: 关联方标识字段实际为?DEF1/DEF2/INNERPROFITCENTER 或需外部主数据 */
+)
+SELECT
+  (NVL((SELECT SUM(net_credit_bal) FROM bal
+        WHERE ACCOUNTCODE LIKE '4001%' OR ACCOUNTCODE LIKE '4002%'
+           OR ACCOUNTCODE LIKE '4101%' OR ACCOUNTCODE LIKE '4104%'), 0)
+ - NVL((SELECT SUM(net_debit_bal) FROM bal WHERE ACCOUNTCODE LIKE '4201%'), 0)
+ - NVL((SELECT SUM(net_debit_bal) FROM bal WHERE ACCOUNTCODE LIKE '1701%'
+        OR ACCOUNTCODE LIKE '1702%' OR ACCOUNTCODE LIKE '1703%'), 0)
+ - NVL((SELECT SUM(net_debit_bal) FROM bal WHERE ACCOUNTCODE LIKE '1711%'), 0)
+ - NVL((SELECT SUM(net_debit_bal) FROM bal WHERE ACCOUNTCODE LIKE '1801%'), 0)
+ - NVL((SELECT SUM(net_debit_bal) FROM bal WHERE ACCOUNTCODE LIKE '1811%'), 0)
+ - rp.amount
+  ) AS effective_net_assets
+FROM related_ar rp;
+""" .
+
+yql:Indicator_PRE_D3_05 a yql:DaysInventoryOutstanding, yql:Indicator ;
+    rdfs:label "存货周转天数"@zh ;
+    skos:notation "PRE-D3-05" ;
+    skos:definition """DIO,存货从采购到售出平均所需天数""" ;
+    yql:hasFormula """AvgInventory / COGS * 365, where AvgInventory = (BeginInventory + EndInventory) / 2""" ;
+    yql:appliedInScenario scn:PreLoanDD ;
+    yql:complexityTier "B" ;
+    yql:greenThreshold "<60" ;
+    yql:amberThreshold "60-90" ;
+    yql:redThreshold ">90" ;
+    yql:usesTable ncc:GL_BALANCE, ncc:IA_MONTHNAB ;
+    yql:hasSQL """
+-- PRE-D3-05 存货周转天数
+-- 公式: 平均存货 / 营业成本 × 365
+-- 数据源: IA_MONTHNAB(按 CACCOUNTPERIOD='YYYYMM' 取月末) + GL_BALANCE
+WITH inv_end AS (
+  SELECT NVL(SUM(NABMNY), 0) AS amount
+  FROM IA_MONTHNAB
+  WHERE PK_ORG = :org_id
+    AND CACCOUNTPERIOD = :year || :period
+),
+inv_begin AS (
+  SELECT NVL(SUM(NABMNY), 0) AS amount
+  FROM IA_MONTHNAB
+  WHERE PK_ORG = :org_id
+    AND CACCOUNTPERIOD = TO_CHAR(ADD_MONTHS(TO_DATE(:year || :period, 'YYYYMM'), -1), 'YYYYMM')
+),
+cogs AS (
+  SELECT NVL(SUM(LOCALDEBITAMOUNT - LOCALCREDITAMOUNT), 0) AS amount
+  FROM GL_BALANCE
+  WHERE PK_ORG = :org_id AND PK_ACCOUNTINGBOOK = :book_id
+    AND YEAR = :year AND PERIOD = :period
+    AND (ACCOUNTCODE LIKE '6401%' OR ACCOUNTCODE LIKE '6402%')
+)
+SELECT ROUND(((inv_end.amount + inv_begin.amount) / 2) / NULLIF(cogs.amount, 0) * 365, 2)
+  AS days_inventory_outstanding
+FROM inv_end, inv_begin, cogs;
+-- TODO #INV-1: IA_MONTHNAB.CACCOUNTPERIOD 格式假设为 'YYYYMM',需贵司确认
+""" .
+
+yql:Indicator_PRE_D4_01 a yql:FreeCashFlow, yql:Indicator ;
+    rdfs:label "自由现金流 FCF"@zh ;
+    skos:notation "PRE-D4-01" ;
+    skos:definition """企业可自由支配的现金流量;采用 FCFF 口径(若需 FCFE 加 NetBorrowing)""" ;
+    yql:hasFormula """OperatingCashFlow - CapitalExpenditures (FCFF口径)""" ;
+    yql:appliedInScenario scn:PreLoanDD ;
+    yql:complexityTier "B" ;
+    yql:greenThreshold ">0" ;
+    yql:amberThreshold "-1000-0万" ;
+    yql:redThreshold "<-1000万" ;
+    yql:usesTable ncc:GL_CASHFLOWCASE, ncc:GL_VOUCHER ;
+    yql:mapsToField ncc:GL_CASHFLOWCASE__MONEY, ncc:GL_CASHFLOWCASE__PK_ACCOUNTINGBOOK, ncc:GL_CASHFLOWCASE__PK_CASHFLOWCASE, ncc:GL_CASHFLOWCASE__PK_ORG, ncc:GL_CASHFLOWCASE__PK_VOUCHER, ncc:GL_VOUCHER__PERIOD, ncc:GL_VOUCHER__PK_VOUCHER, ncc:GL_VOUCHER__YEAR ;
+    yql:hasSQL """
+-- PRE-D4-01 自由现金流 FCF
+-- 公式: CFO - CapEx
+-- 数据源: GL_CASHFLOWCASE + GL_VOUCHER
+-- TODO #FCF-1: 需区分经营/投资/筹资活动,BD_CASHFLOW 表定义现金流项目分类
+WITH all_cf AS (
+  SELECT gc.PK_CASHFLOWCASE, NVL(SUM(gc.MONEY), 0) AS amount
+  FROM GL_CASHFLOWCASE gc
+  JOIN GL_VOUCHER gv ON gc.PK_VOUCHER = gv.PK_VOUCHER
+  WHERE gc.PK_ORG = :org_id AND gc.PK_ACCOUNTINGBOOK = :book_id
+    AND gv.YEAR = :year AND gv.PERIOD = :period
+  GROUP BY gc.PK_CASHFLOWCASE
+)
+SELECT NVL(SUM(amount), 0) AS free_cash_flow
+FROM all_cf;
+-- TODO #FCF-2: 需基于 BD_CASHFLOW 表拆分 CFO 和 CapEx(CapEx 是投资活动下的"购建长期资产"子项)
+-- 本 SQL 暂聚合所有现金流,具体拆分待补 BD_CASHFLOW 编码
+""" .
+
+yql:Indicator_PRE_D4_03 a yql:CapExToRevenueRatio, yql:Indicator ;
+    rdfs:label "资本支出/营收比"@zh ;
+    skos:notation "PRE-D4-03" ;
+    skos:definition """资本开支强度;过高可能挤压自由现金流""" ;
+    yql:hasFormula """CapitalExpenditures / Revenue""" ;
+    yql:appliedInScenario scn:PreLoanDD ;
+    yql:complexityTier "B" ;
+    yql:greenThreshold "<10%" ;
+    yql:amberThreshold "10-20%" ;
+    yql:redThreshold ">20%" ;
+    yql:usesTable ncc:GL_BALANCE, ncc:GL_CASHFLOWCASE, ncc:GL_VOUCHER ;
+    yql:mapsToField ncc:GL_CASHFLOWCASE__MONEY, ncc:GL_CASHFLOWCASE__PK_ACCOUNTINGBOOK, ncc:GL_CASHFLOWCASE__PK_ORG, ncc:GL_CASHFLOWCASE__PK_VOUCHER, ncc:GL_VOUCHER__PERIOD, ncc:GL_VOUCHER__PK_VOUCHER, ncc:GL_VOUCHER__YEAR ;
+    yql:hasSQL """
+-- PRE-D4-03 资本支出 / 营收比
+-- 同 PRE-D4-01 的 TODO,CapEx 需基于 BD_CASHFLOW 分类
+WITH capex AS (
+  SELECT NVL(SUM(gc.MONEY), 0) AS amount
+  FROM GL_CASHFLOWCASE gc
+  JOIN GL_VOUCHER gv ON gc.PK_VOUCHER = gv.PK_VOUCHER
+  WHERE gc.PK_ORG = :org_id AND gc.PK_ACCOUNTINGBOOK = :book_id
+    AND gv.YEAR = :year AND gv.PERIOD = :period
+  /* TODO: PK_CASHFLOWCASE 筛选"购建固定/无形/其他长期资产"相关项目 */
+),
+rev AS (
+  SELECT NVL(SUM(LOCALCREDITAMOUNT - LOCALDEBITAMOUNT), 0) AS amount
+  FROM GL_BALANCE
+  WHERE PK_ORG = :org_id AND PK_ACCOUNTINGBOOK = :book_id
+    AND YEAR = :year AND PERIOD = :period
+    AND (ACCOUNTCODE LIKE '6001%' OR ACCOUNTCODE LIKE '6051%')
+)
+SELECT ROUND(capex.amount / NULLIF(rev.amount, 0), 4) AS capex_to_revenue_ratio
+FROM capex, rev;
+""" .
+
+yql:Indicator_PRE_D4_05 a yql:CashRatio, yql:Indicator ;
+    rdfs:label "现金比率"@zh ;
+    skos:notation "PRE-D4-05" ;
+    skos:definition """最严格的短期偿债能力指标""" ;
+    yql:hasFormula """(CashAndEquivalents + TradingFinancialAssets) / CurrentLiabilities""" ;
+    yql:appliedInScenario scn:PreLoanDD ;
+    yql:complexityTier "B" ;
+    yql:greenThreshold ">=0.3" ;
+    yql:amberThreshold "0.1-0.3" ;
+    yql:redThreshold "<0.1" ;
+    yql:usesTable ncc:GL_BALANCE ;
+    yql:mapsToField ncc:GL_BALANCE__ACCOUNTCODE, ncc:GL_BALANCE__LOCALCREDITAMOUNT, ncc:GL_BALANCE__LOCALDEBITAMOUNT, ncc:GL_BALANCE__PERIOD, ncc:GL_BALANCE__PK_ACCOUNTINGBOOK, ncc:GL_BALANCE__PK_ORG, ncc:GL_BALANCE__YEAR ;
+    yql:hasSQL """
+-- PRE-D4-05 现金比率
+WITH bal AS (
+  SELECT ACCOUNTCODE,
+         SUM(LOCALDEBITAMOUNT - LOCALCREDITAMOUNT) AS net_debit_bal,
+         SUM(LOCALCREDITAMOUNT - LOCALDEBITAMOUNT) AS net_credit_bal
+  FROM GL_BALANCE
+  WHERE PK_ORG = :org_id AND PK_ACCOUNTINGBOOK = :book_id
+    AND YEAR = :year AND PERIOD = :period
+  GROUP BY ACCOUNTCODE
+)
+SELECT ROUND(
+  NVL((SELECT SUM(net_debit_bal) FROM bal WHERE ACCOUNTCODE LIKE '1001%'
+       OR ACCOUNTCODE LIKE '1002%' OR ACCOUNTCODE LIKE '1012%'
+       OR ACCOUNTCODE LIKE '1101%'), 0)
+  / NULLIF(/* 流动负债 */
+NVL((SELECT SUM(ABS(net_debit_bal)) FROM bal WHERE ACCOUNTCODE LIKE '2001%'
+     OR ACCOUNTCODE LIKE '2101%' OR ACCOUNTCODE LIKE '2201%' OR ACCOUNTCODE LIKE '2202%'
+     OR ACCOUNTCODE LIKE '2203%' OR ACCOUNTCODE LIKE '2204%' OR ACCOUNTCODE LIKE '2211%'
+     OR ACCOUNTCODE LIKE '2241%'), 0)
++ NVL((SELECT SUM(ABS(net_debit_bal)) FROM bal WHERE ACCOUNTCODE LIKE '2221%' AND net_debit_bal < 0), 0), 0),
+  4
+) AS cash_ratio FROM dual;
+""" .
+
+yql:Indicator_PRE_D5_03 a yql:TotalAssetTurnover, yql:Indicator ;
+    rdfs:label "总资产周转率"@zh ;
+    skos:notation "PRE-D5-03" ;
+    skos:definition """总资产创造收入的效率""" ;
+    yql:hasFormula """Revenue / AvgTotalAssets""" ;
+    yql:appliedInScenario scn:PreLoanDD ;
+    yql:complexityTier "B" ;
+    yql:greenThreshold ">=1.0" ;
+    yql:amberThreshold "0.5-1.0" ;
+    yql:redThreshold "<0.5" ;
+    yql:usesTable ncc:GL_BALANCE ;
+    yql:mapsToField ncc:GL_BALANCE__ACCOUNTCODE, ncc:GL_BALANCE__LOCALCREDITAMOUNT, ncc:GL_BALANCE__LOCALDEBITAMOUNT, ncc:GL_BALANCE__PERIOD, ncc:GL_BALANCE__PK_ACCOUNTINGBOOK, ncc:GL_BALANCE__PK_ORG, ncc:GL_BALANCE__YEAR ;
+    yql:hasSQL """
+-- PRE-D5-03 总资产周转率
+-- 公式: 营业收入 / 平均总资产
+WITH end_ta AS (
+  SELECT NVL(SUM(LOCALDEBITAMOUNT - LOCALCREDITAMOUNT), 0) AS amount
+  FROM GL_BALANCE WHERE PK_ORG = :org_id AND PK_ACCOUNTINGBOOK = :book_id
+    AND YEAR = :year AND PERIOD = :period AND ACCOUNTCODE LIKE '1%'
+    AND ACCOUNTCODE NOT LIKE '1231%' AND ACCOUNTCODE NOT LIKE '1407%'
+    AND ACCOUNTCODE NOT LIKE '1471%' AND ACCOUNTCODE NOT LIKE '1602%'
+    AND ACCOUNTCODE NOT LIKE '1702%'
+),
+begin_ta AS (
+  SELECT NVL(SUM(LOCALDEBITAMOUNT - LOCALCREDITAMOUNT), 0) AS amount
+  FROM GL_BALANCE WHERE PK_ORG = :org_id AND PK_ACCOUNTINGBOOK = :book_id
+    AND YEAR = :year AND PERIOD = LPAD(TO_CHAR(TO_NUMBER(:period) - 1), 2, '0')
+    AND ACCOUNTCODE LIKE '1%'
+    AND ACCOUNTCODE NOT LIKE '1231%' AND ACCOUNTCODE NOT LIKE '1407%'
+    AND ACCOUNTCODE NOT LIKE '1471%' AND ACCOUNTCODE NOT LIKE '1602%'
+    AND ACCOUNTCODE NOT LIKE '1702%'
+),
+rev AS (
+  SELECT NVL(SUM(LOCALCREDITAMOUNT - LOCALDEBITAMOUNT), 0) AS amount
+  FROM GL_BALANCE WHERE PK_ORG = :org_id AND PK_ACCOUNTINGBOOK = :book_id
+    AND YEAR = :year AND PERIOD = :period
+    AND (ACCOUNTCODE LIKE '6001%' OR ACCOUNTCODE LIKE '6051%')
+)
+SELECT ROUND(rev.amount / NULLIF((end_ta.amount + begin_ta.amount) / 2, 0), 4)
+  AS total_asset_turnover
+FROM end_ta, begin_ta, rev;
+-- TODO #TURN-1: :period='01' 时期初应取上年 12 月(本 SQL 未处理跨年)
+""" .
+
+yql:Indicator_PRE_D5_04 a yql:ROE, yql:Indicator ;
+    rdfs:label "净资产收益率 ROE"@zh ;
+    skos:notation "PRE-D5-04" ;
+    skos:definition """股东权益的回报率(分母用平均口径而非期末单点)""" ;
+    yql:hasFormula """NetIncome / AvgStockholdersEquity, where Avg = (Begin + End) / 2""" ;
+    yql:appliedInScenario scn:PreLoanDD ;
+    yql:complexityTier "B" ;
+    yql:greenThreshold ">=12%" ;
+    yql:amberThreshold "5-12%" ;
+    yql:redThreshold "<5%" ;
+    yql:usesTable ncc:GL_BALANCE ;
+    yql:mapsToField ncc:GL_BALANCE__ACCOUNTCODE, ncc:GL_BALANCE__LOCALCREDITAMOUNT, ncc:GL_BALANCE__LOCALDEBITAMOUNT, ncc:GL_BALANCE__PERIOD, ncc:GL_BALANCE__PK_ACCOUNTINGBOOK, ncc:GL_BALANCE__PK_ORG, ncc:GL_BALANCE__YEAR ;
+    yql:hasSQL """
+-- PRE-D5-04 净资产收益率 ROE
+-- 公式: 净利润 / 平均所有者权益
+WITH bal_end AS (
+  SELECT ACCOUNTCODE,
+         SUM(LOCALDEBITAMOUNT - LOCALCREDITAMOUNT) AS net_debit_bal,
+         SUM(LOCALCREDITAMOUNT - LOCALDEBITAMOUNT) AS net_credit_bal
+  FROM GL_BALANCE WHERE PK_ORG = :org_id AND PK_ACCOUNTINGBOOK = :book_id
+    AND YEAR = :year AND PERIOD = :period
+  GROUP BY ACCOUNTCODE
+),
+bal_begin AS (
+  SELECT ACCOUNTCODE,
+         SUM(LOCALCREDITAMOUNT - LOCALDEBITAMOUNT) AS net_credit_bal
+  FROM GL_BALANCE WHERE PK_ORG = :org_id AND PK_ACCOUNTINGBOOK = :book_id
+    AND YEAR = :year AND PERIOD = LPAD(TO_CHAR(TO_NUMBER(:period) - 1), 2, '0')
+  GROUP BY ACCOUNTCODE
+),
+ni AS (
+  SELECT
+    (NVL(SUM(CASE WHEN ACCOUNTCODE LIKE '6001%' OR ACCOUNTCODE LIKE '6051%' THEN net_credit_bal END), 0)
+   - NVL(SUM(CASE WHEN ACCOUNTCODE LIKE '6401%' OR ACCOUNTCODE LIKE '6402%'
+                    OR ACCOUNTCODE LIKE '6403%' OR ACCOUNTCODE LIKE '6601%'
+                    OR ACCOUNTCODE LIKE '6602%' OR ACCOUNTCODE LIKE '6603%'
+                    OR ACCOUNTCODE LIKE '6604%' OR ACCOUNTCODE LIKE '6701%'
+                    OR ACCOUNTCODE LIKE '6702%' OR ACCOUNTCODE LIKE '6711%'
+                    OR ACCOUNTCODE LIKE '6801%' THEN net_debit_bal END), 0)
+   + NVL(SUM(CASE WHEN ACCOUNTCODE LIKE '6111%' OR ACCOUNTCODE LIKE '6117%'
+                    OR ACCOUNTCODE LIKE '6301%' THEN net_credit_bal END), 0)
+    ) AS amount
+  FROM bal_end
+)
+SELECT ROUND(
+  ni.amount /
+  NULLIF(((NVL((SELECT SUM(net_credit_bal) FROM bal_end WHERE ACCOUNTCODE LIKE '4%'), 0)
+          + NVL((SELECT SUM(net_credit_bal) FROM bal_begin WHERE ACCOUNTCODE LIKE '4%'), 0)) / 2), 0),
+  4
+) AS roe FROM ni;
+""" .
+
+yql:Indicator_PRE_D6_01 a yql:CustomerConcentration, yql:Indicator ;
+    rdfs:label "客户集中度"@zh ;
+    skos:notation "PRE-D6-01" ;
+    skos:definition """前 N 大客户营收占比,反映客户依赖风险""" ;
+    yql:hasFormula """SUM(TopN_Customer_Revenue) / TotalRevenue (默认 N=3 或 N=5)""" ;
+    yql:appliedInScenario scn:PreLoanDD ;
+    yql:complexityTier "B" ;
+    yql:greenThreshold "<30%" ;
+    yql:amberThreshold "30-50%" ;
+    yql:redThreshold ">50%" ;
+    yql:usesTable ncc:SO_SALEINVOICE ;
+    yql:mapsToField ncc:SO_SALEINVOICE__CINVOICECUSTID, ncc:SO_SALEINVOICE__CINVOICECUSTVID, ncc:SO_SALEINVOICE__DBILLDATE, ncc:SO_SALEINVOICE__FSTATUSFLAG, ncc:SO_SALEINVOICE__NTOTALORIGMNY, ncc:SO_SALEINVOICE__PK_ORG ;
+    yql:hasSQL """
+-- PRE-D6-01 客户集中度(前5大客户销售额占比)
+-- 数据源: SO_SALEINVOICE(发票主表)+ BD_CUSTOMER
+-- TODO #CC-1: 客户ID字段为 CINVOICECUSTID(开票客户);另有 CINVOICECUSTVID(版本)
+WITH sales_by_cust AS (
+  SELECT si.CINVOICECUSTID AS cust_id, SUM(si.NTOTALORIGMNY) AS amt
+  FROM SO_SALEINVOICE si
+  WHERE si.PK_ORG = :org_id
+    AND si.DBILLDATE BETWEEN TO_DATE(:year||'-01-01','YYYY-MM-DD') AND :asof_date
+    AND si.FSTATUSFLAG = 1  /* 已审核,TODO #CC-2: 贵司 FSTATUSFLAG 具体枚举 */
+  GROUP BY si.CINVOICECUSTID
+),
+top5 AS (SELECT cust_id, amt FROM sales_by_cust ORDER BY amt DESC FETCH FIRST 5 ROWS ONLY),
+total AS (SELECT NVL(SUM(amt),0) AS amt FROM sales_by_cust)
+SELECT ROUND((SELECT NVL(SUM(amt),0) FROM top5) / NULLIF(total.amt, 0), 4) AS customer_concentration
+FROM total;
+-- TODO #CC-3: NTOTALORIGMNY 为原币含税金额,本币口径建议取其他字段或 join 汇率
+""" .
+
+yql:Indicator_PRE_D6_02 a yql:SupplierConcentration, yql:Indicator ;
+    rdfs:label "供应商集中度"@zh ;
+    skos:notation "PRE-D6-02" ;
+    skos:definition """前 N 大供应商采购占比,反映供应链依赖风险""" ;
+    yql:hasFormula """SUM(TopN_Supplier_Purchase) / TotalPurchase""" ;
+    yql:appliedInScenario scn:PreLoanDD ;
+    yql:complexityTier "B" ;
+    yql:greenThreshold "<40%" ;
+    yql:amberThreshold "40-60%" ;
+    yql:redThreshold ">60%" ;
+    yql:usesTable ncc:PO_INVOICE ;
+    yql:mapsToField ncc:PO_INVOICE__DBILLDATE, ncc:PO_INVOICE__FBILLSTATUS, ncc:PO_INVOICE__NTOTALORIGMNY, ncc:PO_INVOICE__PK_ORG, ncc:PO_INVOICE__PK_SUPPLIER ;
+    yql:hasSQL """
+-- PRE-D6-02 供应商集中度(前5大供应商采购占比)
+-- 数据源: PO_INVOICE + BD_SUPPLIER
+WITH purch_by_sup AS (
+  SELECT pi.PK_SUPPLIER AS sup_id, SUM(pi.NTOTALORIGMNY) AS amt
+  FROM PO_INVOICE pi
+  WHERE pi.PK_ORG = :org_id
+    AND pi.DBILLDATE BETWEEN TO_DATE(:year||'-01-01','YYYY-MM-DD') AND :asof_date
+    AND pi.FBILLSTATUS = 1  /* 已审核,TODO 贵司状态值 */
+  GROUP BY pi.PK_SUPPLIER
+),
+top5 AS (SELECT sup_id, amt FROM purch_by_sup ORDER BY amt DESC FETCH FIRST 5 ROWS ONLY),
+total AS (SELECT NVL(SUM(amt),0) AS amt FROM purch_by_sup)
+SELECT ROUND((SELECT NVL(SUM(amt),0) FROM top5) / NULLIF(total.amt, 0), 4) AS supplier_concentration
+FROM total;
+""" .
+
+yql:Indicator_PRE_D6_03 a yql:RelatedPartyARRatio, yql:Indicator ;
+    rdfs:label "关联方应收占比"@zh ;
+    skos:notation "PRE-D6-03" ;
+    skos:definition """关联方应收占应收总额比例,过高提示利润操纵或资金占用风险""" ;
+    yql:hasFormula """RelatedParty_AR_Balance / Total_AR_Balance""" ;
+    yql:appliedInScenario scn:PreLoanDD ;
+    yql:complexityTier "B" ;
+    yql:greenThreshold "<10%" ;
+    yql:amberThreshold "10-30%" ;
+    yql:redThreshold ">30%" ;
+    yql:usesTable ncc:ARAP_BALANCE, ncc:BD_CUSTOMER ;
+    yql:mapsToField ncc:ARAP_BALANCE__ACCPERIOD, ncc:ARAP_BALANCE__ACCYEAR, ncc:ARAP_BALANCE__BILLCLASS, ncc:ARAP_BALANCE__CUSTOMER, ncc:ARAP_BALANCE__LOCAL_MONEY_CR, ncc:ARAP_BALANCE__LOCAL_MONEY_DE, ncc:ARAP_BALANCE__PK_ORG, ncc:BD_CUSTOMER__INNERPROFITCENTER, ncc:BD_CUSTOMER__PK_CUSTOMER ;
+    yql:hasSQL """
+-- PRE-D6-03 关联方应收占比
+-- 公式: 关联方应收余额 / 总应收余额
+-- TODO #RP-1: 关联方识别通过 BD_CUSTOMER.INNERPROFITCENTER='Y' 近似
+WITH related_ar AS (
+  SELECT NVL(SUM(ab.LOCAL_MONEY_DE - ab.LOCAL_MONEY_CR), 0) AS amount
+  FROM ARAP_BALANCE ab
+  JOIN BD_CUSTOMER c ON ab.CUSTOMER = c.PK_CUSTOMER
+  WHERE ab.PK_ORG = :org_id
+    AND ab.ACCYEAR = :year AND ab.ACCPERIOD = :period
+    AND ab.BILLCLASS = 'AR'
+    AND c.INNERPROFITCENTER = 'Y'
+),
+total_ar AS (
+  SELECT NVL(SUM(LOCAL_MONEY_DE - LOCAL_MONEY_CR), 0) AS amount
+  FROM ARAP_BALANCE
+  WHERE PK_ORG = :org_id AND ACCYEAR = :year AND ACCPERIOD = :period
+    AND BILLCLASS = 'AR'
+)
+SELECT ROUND(related_ar.amount / NULLIF(total_ar.amount, 0), 4) AS related_party_ar_ratio
+FROM related_ar, total_ar;
+-- TODO #RP-2: LOCAL_MONEY_BAL 为本币余额,LOCAL_MONEY_DE 为借方发生额
+-- 应收余额应为 LOCAL_MONEY_DE - LOCAL_MONEY_CR 还是直接 LOCAL_MONEY_BAL?需核实
+""" .
+
+yql:Indicator_SCF_D1_07 a yql:RelatedPartyTxRatio, yql:Indicator ;
+    rdfs:label "关联方交易占比"@zh ;
+    skos:notation "SCF-D1-07" ;
+    skos:definition """关联方交易额占总交易额比例""" ;
+    yql:hasFormula """RelatedParty_TxnAmt / Total_TxnAmt""" ;
+    yql:appliedInScenario scn:SupplyChainFinance ;
+    yql:complexityTier "B" ;
+    yql:greenThreshold "<20%" ;
+    yql:amberThreshold "20-40%" ;
+    yql:redThreshold ">40%" ;
+    yql:usesTable ncc:BD_CUSTOMER, ncc:BD_SUPPLIER, ncc:PO_INVOICE, ncc:SO_SALEINVOICE ;
+    yql:mapsToField ncc:BD_CUSTOMER__INNERPROFITCENTER, ncc:BD_CUSTOMER__PK_CUSTOMER, ncc:BD_SUPPLIER__INNERPROFITCENTER, ncc:BD_SUPPLIER__PK_SUPPLIER, ncc:PO_INVOICE__DBILLDATE, ncc:PO_INVOICE__NTOTALORIGMNY, ncc:PO_INVOICE__PK_ORG, ncc:PO_INVOICE__PK_SUPPLIER, ncc:SO_SALEINVOICE__CINVOICECUSTID, ncc:SO_SALEINVOICE__DBILLDATE, ncc:SO_SALEINVOICE__NTOTALORIGMNY, ncc:SO_SALEINVOICE__PK_ORG ;
+    yql:hasSQL """
+-- SCF-D1-07 关联方交易占比
+-- 公式: (关联方销售 + 关联方采购) / (总销售 + 总采购)
+-- TODO #RP-1: 关联方识别用 INNERPROFITCENTER='Y' 近似
+WITH sale AS (
+  SELECT
+    SUM(CASE WHEN c.INNERPROFITCENTER = 'Y' THEN si.NTOTALORIGMNY END) AS related,
+    SUM(si.NTOTALORIGMNY) AS total
+  FROM SO_SALEINVOICE si
+  LEFT JOIN BD_CUSTOMER c ON si.CINVOICECUSTID = c.PK_CUSTOMER
+  WHERE si.PK_ORG = :org_id
+    AND si.DBILLDATE BETWEEN TO_DATE(:year||'-01-01','YYYY-MM-DD') AND :asof_date
+),
+purch AS (
+  SELECT
+    SUM(CASE WHEN s.INNERPROFITCENTER = 'Y' THEN pi.NTOTALORIGMNY END) AS related,
+    SUM(pi.NTOTALORIGMNY) AS total
+  FROM PO_INVOICE pi
+  LEFT JOIN BD_SUPPLIER s ON pi.PK_SUPPLIER = s.PK_SUPPLIER
+  WHERE pi.PK_ORG = :org_id
+    AND pi.DBILLDATE BETWEEN TO_DATE(:year||'-01-01','YYYY-MM-DD') AND :asof_date
+)
+SELECT ROUND((NVL(sale.related,0) + NVL(purch.related,0)) /
+             NULLIF(NVL(sale.total,0) + NVL(purch.total,0), 0), 4)
+  AS related_party_transaction_ratio
+FROM sale, purch;
+""" .
+
+yql:Indicator_SCF_D2_03 a yql:ARConcentration, yql:Indicator ;
+    rdfs:label "应收账款集中度"@zh ;
+    skos:notation "SCF-D2-03" ;
+    skos:definition """前 N 大买方应收余额占总应收的比例""" ;
+    yql:hasFormula """SUM(TopN_Customer_AR) / TotalAR (默认 N=3)""" ;
+    yql:appliedInScenario scn:SupplyChainFinance ;
+    yql:complexityTier "B" ;
+    yql:greenThreshold "<40%" ;
+    yql:amberThreshold "40-60%" ;
+    yql:redThreshold ">60%" ;
+    yql:usesTable ncc:ARAP_BALANCE ;
+    yql:mapsToField ncc:ARAP_BALANCE__ACCPERIOD, ncc:ARAP_BALANCE__ACCYEAR, ncc:ARAP_BALANCE__BILLCLASS, ncc:ARAP_BALANCE__CUSTOMER, ncc:ARAP_BALANCE__LOCAL_MONEY_CR, ncc:ARAP_BALANCE__LOCAL_MONEY_DE, ncc:ARAP_BALANCE__PK_ORG ;
+    yql:hasSQL """
+-- SCF-D2-03 应收账款集中度(前5大客户应收占比)
+WITH ar_by_cust AS (
+  SELECT CUSTOMER, SUM(LOCAL_MONEY_DE - LOCAL_MONEY_CR) AS amt
+  FROM ARAP_BALANCE
+  WHERE PK_ORG = :org_id AND ACCYEAR = :year AND ACCPERIOD = :period AND BILLCLASS = 'AR'
+  GROUP BY CUSTOMER
+),
+top5 AS (SELECT CUSTOMER, amt FROM ar_by_cust ORDER BY amt DESC FETCH FIRST 5 ROWS ONLY),
+total AS (SELECT NVL(SUM(amt),0) AS amt FROM ar_by_cust)
+SELECT ROUND((SELECT NVL(SUM(amt),0) FROM top5) / NULLIF(total.amt, 0), 4) AS ar_concentration
+FROM total;
+-- TODO: ARAP_BALANCE 的"余额"字段验证(LOCAL_MONEY_DE 为借方发生,LOCAL_MONEY_BAL 为余额),
+-- 应收余额= DE - BAL 还是直接取 BAL?需测试数据验证
+""" .
+
+yql:Indicator_SCF_D2_05 a yql:ARDisputeRate, yql:Indicator ;
+    rdfs:label "应收账款争议率"@zh ;
+    skos:notation "SCF-D2-05" ;
+    skos:definition """存在争议的应收账款金额占比""" ;
+    yql:hasFormula """Disputed_AR_Amount / Total_AR_Amount (依据工单系统标记)""" ;
+    yql:appliedInScenario scn:SupplyChainFinance ;
+    yql:complexityTier "B" ;
+    yql:greenThreshold "<2%" ;
+    yql:amberThreshold "2-5%" ;
+    yql:redThreshold ">5%" ;
+    yql:usesTable ncc:AR_RECBILL ;
+    yql:mapsToField ncc:AR_RECBILL__BILLPERIOD, ncc:AR_RECBILL__BILLSTATUS, ncc:AR_RECBILL__BILLYEAR, ncc:AR_RECBILL__DEF1, ncc:AR_RECBILL__LOCAL_MONEY, ncc:AR_RECBILL__PK_ORG, ncc:AR_RECBILL__SCOMMENT ;
+    yql:hasSQL """
+-- SCF-D2-05 应收账款争议率
+-- TODO #DR-1: AR_RECBILL 无专用"争议"字段。候选方案:
+--   A) BILLSTATUS 某些值表示争议(需贵司枚举字典)
+--   B) DEF1-80 某列标注为"争议标志"
+--   C) SCOMMENT 文本匹配关键词(不推荐)
+-- 本 SQL 先以 BILLSTATUS NOT IN (1, 2) 作为"异常/争议"占位
+WITH ar_by_status AS (
+  SELECT
+    SUM(CASE WHEN rb.BILLSTATUS NOT IN (1, 2) THEN rb.LOCAL_MONEY END) AS dispute_amt,
+    SUM(rb.LOCAL_MONEY) AS total_amt
+  FROM AR_RECBILL rb
+  WHERE rb.PK_ORG = :org_id
+    AND rb.BILLYEAR = :year AND rb.BILLPERIOD = :period
+)
+SELECT ROUND(NVL(dispute_amt,0) / NULLIF(NVL(total_amt,0), 0), 4) AS ar_dispute_rate
+FROM ar_by_status;
+-- TODO #DR-2: 本 SQL 只是占位逻辑,待贵司确认真正的"争议"标识字段后重写
+""" .
+
+yql:Indicator_SCF_D4_01 a yql:SupplierStability, yql:Indicator ;
+    rdfs:label "供应商关系稳定性"@zh ;
+    skos:notation "SCF-D4-01" ;
+    skos:definition """年度供应商保留率,反映供应链稳定性""" ;
+    yql:hasFormula """Suppliers_Both_Years / Suppliers_Prior_Year (年度保留率)""" ;
+    yql:appliedInScenario scn:SupplyChainFinance ;
+    yql:complexityTier "B" ;
+    yql:greenThreshold ">=90%" ;
+    yql:amberThreshold "75-90%" ;
+    yql:redThreshold "<75%" ;
+    yql:usesTable ncc:BD_SUPPLIER, ncc:PO_ORDER ;
+    yql:mapsToField ncc:BD_SUPPLIER__BEGINDATE, ncc:BD_SUPPLIER__PK_SUPPLIER ;
+    yql:hasSQL """
+-- SCF-D4-01 供应商关系稳定性
+-- 公式: 合作≥2年的供应商数 / 活跃供应商数
+-- 活跃:近 12 个月有订单;稳定:BD_SUPPLIER.BEGINDATE 早于 :asof_date - 24 月
+WITH active_sup AS (
+  SELECT DISTINCT PK_SUPPLIER FROM PO_ORDER
+  WHERE PK_ORG = :org_id AND DBILLDATE >= ADD_MONTHS(:asof_date, -12)
+),
+stable_sup AS (
+  SELECT s.PK_SUPPLIER
+  FROM BD_SUPPLIER s
+  WHERE s.PK_SUPPLIER IN (SELECT PK_SUPPLIER FROM active_sup)
+    AND s.BEGINDATE <= TO_CHAR(ADD_MONTHS(:asof_date, -24), 'YYYY-MM-DD')
+)
+SELECT ROUND(
+  (SELECT COUNT(*) FROM stable_sup) * 1.0 /
+  NULLIF((SELECT COUNT(*) FROM active_sup), 0),
+  4
+) AS supplier_stability_ratio FROM dual;
+-- TODO #SS-1: BD_SUPPLIER.BEGINDATE 类型为 CHAR(19),比较需类型处理
+""" .
+
+yql:Indicator_SCF_D4_04 a yql:DaysInventoryOutstanding, yql:Indicator ;
+    rdfs:label "供应链库存周转天数"@zh ;
+    skos:notation "SCF-D4-04" ;
+    skos:definition """供应链场景的库存周转天数(与 PRE-D3-05 同公式,观察主体扩到链路)""" ;
+    yql:hasFormula """AvgInventory / COGS * 365 (供应链全链路视角)""" ;
+    yql:appliedInScenario scn:SupplyChainFinance ;
+    yql:complexityTier "B" ;
+    yql:greenThreshold "<45" ;
+    yql:amberThreshold "45-60" ;
+    yql:redThreshold ">60" ;
+    yql:usesTable ncc:GL_BALANCE, ncc:IA_MONTHNAB ;
+    yql:hasSQL """
+-- SCF-D4-04 供应链库存周转天数(同 PRE-D3-05 口径)
+WITH inv_end AS (
+  SELECT NVL(SUM(NABMNY), 0) AS amount
+  FROM IA_MONTHNAB WHERE PK_ORG = :org_id
+    AND CACCOUNTPERIOD = :year || :period
+),
+inv_begin AS (
+  SELECT NVL(SUM(NABMNY), 0) AS amount
+  FROM IA_MONTHNAB WHERE PK_ORG = :org_id
+    AND CACCOUNTPERIOD = TO_CHAR(ADD_MONTHS(TO_DATE(:year || :period, 'YYYYMM'), -1), 'YYYYMM')
+),
+cogs AS (
+  SELECT NVL(SUM(LOCALDEBITAMOUNT - LOCALCREDITAMOUNT), 0) AS amount
+  FROM GL_BALANCE WHERE PK_ORG = :org_id AND PK_ACCOUNTINGBOOK = :book_id
+    AND YEAR = :year AND PERIOD = :period
+    AND (ACCOUNTCODE LIKE '6401%' OR ACCOUNTCODE LIKE '6402%')
+)
+SELECT ROUND(((inv_end.amount + inv_begin.amount) / 2) / NULLIF(cogs.amount, 0) * 365, 2)
+  AS supply_chain_inventory_days
+FROM inv_end, inv_begin, cogs;
+""" .
+
+yql:Indicator_SCF_D4_06 a yql:DPO, yql:Indicator ;
+    rdfs:label "供应链DPO"@zh ;
+    skos:notation "SCF-D4-06" ;
+    skos:definition """应付账款周转天数 DPO""" ;
+    yql:hasFormula """AvgAP / COGS * 365""" ;
+    yql:appliedInScenario scn:SupplyChainFinance ;
+    yql:complexityTier "B" ;
+    yql:greenThreshold "<60" ;
+    yql:amberThreshold "60-90" ;
+    yql:redThreshold ">90 (压款)" ;
+    yql:usesTable ncc:AP_PAYABLEITEM, ncc:GL_BALANCE ;
+    yql:mapsToField ncc:AP_PAYABLEITEM__BILLDATE, ncc:AP_PAYABLEITEM__PK_ORG ;
+    yql:hasSQL """
+-- SCF-D4-06 供应链 DPO(应付账款周转天数)
+-- 公式: 平均应付 / 营业成本 × 365
+WITH ap_end AS (
+  SELECT NVL(SUM(LOCAL_MONEY_BAL), 0) AS amount
+  FROM AP_PAYABLEITEM api
+  WHERE api.PK_ORG = :org_id
+    AND api.BILLDATE <= LAST_DAY(TO_DATE(:year||'-'||:period||'-01','YYYY-MM-DD'))
+),
+ap_begin AS (
+  SELECT NVL(SUM(LOCAL_MONEY_BAL), 0) AS amount
+  FROM AP_PAYABLEITEM api
+  WHERE api.PK_ORG = :org_id
+    AND api.BILLDATE <= LAST_DAY(ADD_MONTHS(TO_DATE(:year||'-'||:period||'-01','YYYY-MM-DD'), -1))
+),
+cogs AS (
+  SELECT NVL(SUM(LOCALDEBITAMOUNT - LOCALCREDITAMOUNT), 0) AS amount
+  FROM GL_BALANCE WHERE PK_ORG = :org_id AND PK_ACCOUNTINGBOOK = :book_id
+    AND YEAR = :year AND PERIOD = :period
+    AND (ACCOUNTCODE LIKE '6401%' OR ACCOUNTCODE LIKE '6402%')
+)
+SELECT ROUND(((ap_end.amount + ap_begin.amount) / 2) / NULLIF(cogs.amount, 0) * 365, 2)
+  AS days_payable_outstanding
+FROM ap_end, ap_begin, cogs;
+-- TODO #DPO-1: LOCAL_MONEY_BAL 是应付余额字段名(已核对)
+""" .
+
+yql:Indicator_SCF_D4_07 a yql:SCFLoanHistory, yql:Indicator ;
+    rdfs:label "供应链融资历史"@zh ;
+    skos:notation "SCF-D4-07" ;
+    skos:definition """历史供应链融资交易记录的结构化档案""" ;
+    yql:hasFormula """复合记录:{TxnCount, CumulativeAmount, DefaultCount, OverdueCount, MaxYearsOfCooperation}""" ;
+    yql:appliedInScenario scn:SupplyChainFinance ;
+    yql:complexityTier "B" ;
+    yql:usesTable ncc:CDMC_CONTRACT, ncc:CDMC_REPAYPRCPL ;
+    yql:hasSQL """
+-- SCF-D4-07 供应链融资历史(供应链融资笔数 + 按时还款率)
+WITH loan_count AS (
+  SELECT COUNT(DISTINCT PK_CONTRACT) AS cnt
+  FROM CDMC_CONTRACT
+  WHERE PK_ORG = :org_id
+    AND DAPPROVEDATE BETWEEN TO_CHAR(ADD_MONTHS(:asof_date, -36), 'YYYY-MM-DD')
+                         AND TO_CHAR(:asof_date, 'YYYY-MM-DD')
+  /* TODO #SCF-1: 如何识别"供应链融资"?需 CDMC_CONTRACT.BILLTYPE 或 TRANSACTTYPE 枚举 */
+),
+repay_stats AS (
+  SELECT
+    COUNT(*) AS total_plans,
+    SUM(CASE WHEN OVERDUEFLAG = 'N' OR OVERDUEFLAG IS NULL THEN 1 ELSE 0 END) AS on_time
+  FROM CDMC_REPAYPRCPL
+  WHERE PK_ORG = :org_id
+    AND CALCUDATE BETWEEN TO_CHAR(ADD_MONTHS(:asof_date, -36), 'YYYY-MM-DD')
+                      AND TO_CHAR(:asof_date, 'YYYY-MM-DD')
+)
+SELECT
+  loan_count.cnt AS scf_loan_count,
+  ROUND(repay_stats.on_time * 1.0 / NULLIF(repay_stats.total_plans, 0), 4) AS on_time_repay_ratio
+FROM loan_count, repay_stats;
+-- TODO #SCF-2: OVERDUEFLAG 值域:'Y'/'N' 还是 '0'/'1'?需确认
+""" .
+
+
+# =============================================================================
+# SPARQL 使用示例(代理服务)
+# =============================================================================
+#
+# 示例 1: 按指标 ID 取可执行 SQL
+# PREFIX yql: <http://yql.example.com/ontology/credit-risk/>
+# PREFIX skos: <http://www.w3.org/2004/02/skos/core#>
+# SELECT ?sql WHERE { ?ind skos:notation "PRE-D1-01" ; yql:hasSQL ?sql . }
+#
+# 示例 2: 某场景下所有指标 + SQL
+# PREFIX yql: <http://yql.example.com/ontology/credit-risk/>
+# PREFIX scn: <http://yql.example.com/ontology/scenario/>
+# SELECT ?id ?name ?sql WHERE {
+#   ?ind a yql:Indicator ; yql:appliedInScenario scn:PreLoanDD ;
+#        skos:notation ?id ; rdfs:label ?name ; yql:hasSQL ?sql . }
+#
+# 示例 3: 列出指标引用的字段(中文标签)
+# SELECT ?field_label WHERE {
+#   yql:Indicator_PRE_D1_01 yql:mapsToField ?f .
+#   ?f rdfs:label ?field_label . }

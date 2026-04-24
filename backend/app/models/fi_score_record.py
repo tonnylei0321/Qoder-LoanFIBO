@@ -13,7 +13,7 @@ class FiScoreRecord(Base):
     __tablename__ = "fi_score_record"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    company_id = Column(UUID(as_uuid=True), ForeignKey("fi_company.id"), nullable=False, comment="企业ID")
+    company_id = Column(UUID(as_uuid=True), ForeignKey("fi_applicant_org.id"), nullable=False, comment="企业ID")
     scenario = Column(String(16), nullable=False, comment="场景：pre_loan / post_loan / scf")
     total_score = Column(Numeric(5, 2), nullable=True, comment="综合评分（0-100）")
     risk_level = Column(String(16), nullable=True,

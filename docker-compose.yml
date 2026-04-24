@@ -10,6 +10,7 @@ services:
       POSTGRES_PASSWORD: loanfibo_secret
     ports:
       - "5434:5432"
+    restart: always
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./init-db.sql:/docker-entrypoint-initdb.d/init-db.sql
@@ -26,6 +27,7 @@ services:
     container_name: loanfibo-redis
     ports:
       - "6380:6379"
+    restart: always
     volumes:
       - redis_data:/data
     networks:
@@ -41,6 +43,7 @@ services:
     container_name: loanfibo-graphdb
     ports:
       - "7200:7200"
+    restart: always
     volumes:
       - graphdb_data:/opt/graphdb/home
       - ./docs/fibo-master_2025Q4:/opt/fibo:ro

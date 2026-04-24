@@ -7,8 +7,11 @@
       <div class="gradient-orb orb-3"></div>
     </div>
     
-    <!-- Sidebar -->
-    <aside class="modern-sidebar" :class="{ collapsed: sidebarCollapsed }">
+    <!-- Drawer Overlay (hidden when pinned) -->
+    <div v-if="!sidebarPinned" class="drawer-overlay" :class="{ visible: drawerOpen }" @click="closeDrawer"></div>
+
+    <!-- Sidebar: pinned or drawer -->
+    <aside class="modern-sidebar" :class="{ open: drawerOpen || sidebarPinned, pinned: sidebarPinned }">
       <div class="sidebar-header">
         <div class="brand">
           <div class="brand-icon">
@@ -24,134 +27,271 @@
               </defs>
             </svg>
           </div>
-          <span class="brand-text" v-show="!sidebarCollapsed">LoanFIBO</span>
+          <span class="brand-text">LoanFIBO</span>
         </div>
-        <button class="collapse-btn" @click="sidebarCollapsed = !sidebarCollapsed">
-          <el-icon><Fold v-if="!sidebarCollapsed" /><Expand v-else /></el-icon>
+        <button class="close-btn" @click="closeDrawer">
+          <el-icon><Close /></el-icon>
+        </button>
+        <button class="pin-btn" @click="toggleSidebarPin" :title="sidebarPinned ? '取消固定（抽屉模式）' : '固定侧边栏（常驻）'" :class="{ active: sidebarPinned }">
+          <el-icon><Finished v-if="sidebarPinned" /><Grid v-else /></el-icon>
         </button>
       </div>
       
       <nav class="sidebar-nav">
         <div class="nav-section">
-          <div class="nav-label" v-show="!sidebarCollapsed">主菜单</div>
-          <router-link to="/dashboard" class="nav-item" :class="{ active: $route.path === '/dashboard' }">
-            <div class="nav-icon">
-              <el-icon><DataLine /></el-icon>
-            </div>
-            <span class="nav-text" v-show="!sidebarCollapsed">语义对齐看板</span>
-            <div class="nav-glow"></div>
-          </router-link>
+          <div class="nav-label" @click="toggleSection('main')">
+            <span>主菜单</span>
+            <el-icon class="collapse-arrow" :class="{ rotated: isSectionCollapsed('main') }"><ArrowRight /></el-icon>
+          </div>
+          <div class="nav-items" v-show="!isSectionCollapsed('main')">
+            <router-link v-if="authStore.canAccessMenu('dashboard')" to="/dashboard" class="nav-item" :class="{ active: $route.path === '/dashboard' }" @click="closeDrawer">
+              <div class="nav-icon">
+                <el-icon><DataLine /></el-icon>
+              </div>
+              <span class="nav-text">语义对齐看板</span>
+              <div class="nav-glow"></div>
+            </router-link>
+          </div>
         </div>
         
-        <div class="nav-section">
-          <div class="nav-label" v-show="!sidebarCollapsed">数据管理</div>
-          <router-link to="/files/ddl" class="nav-item" :class="{ active: $route.path === '/files/ddl' }">
-            <div class="nav-icon">
-              <el-icon><Document /></el-icon>
-            </div>
-            <span class="nav-text" v-show="!sidebarCollapsed">DDL 文件</span>
-            <div class="nav-glow"></div>
-          </router-link>
-          <router-link to="/files/ttl" class="nav-item" :class="{ active: $route.path === '/files/ttl' }">
-            <div class="nav-icon">
-              <el-icon><Connection /></el-icon>
-            </div>
-            <span class="nav-text" v-show="!sidebarCollapsed">TTL 文件</span>
-            <div class="nav-glow"></div>
-          </router-link>
-          <router-link to="/jobs" class="nav-item" :class="{ active: $route.path.includes('/jobs') }">
-            <div class="nav-icon">
-              <el-icon><List /></el-icon>
-            </div>
-            <span class="nav-text" v-show="!sidebarCollapsed">任务管理</span>
-            <div class="nav-glow"></div>
-          </router-link>
+        <div class="nav-section" v-if="authStore.canAccessMenu('ddl-files') || authStore.canAccessMenu('ttl-files') || authStore.canAccessMenu('jobs')">
+          <div class="nav-label" @click="toggleSection('data')">
+            <span>数据管理</span>
+            <el-icon class="collapse-arrow" :class="{ rotated: isSectionCollapsed('data') }"><ArrowRight /></el-icon>
+          </div>
+          <div class="nav-items" v-show="!isSectionCollapsed('data')">
+            <router-link v-if="authStore.canAccessMenu('ddl-files')" to="/files/ddl" class="nav-item" :class="{ active: $route.path === '/files/ddl' }" @click="closeDrawer">
+              <div class="nav-icon">
+                <el-icon><Document /></el-icon>
+              </div>
+              <span class="nav-text">DDL 文件</span>
+              <div class="nav-glow"></div>
+            </router-link>
+            <router-link v-if="authStore.canAccessMenu('ttl-files')" to="/files/ttl" class="nav-item" :class="{ active: $route.path === '/files/ttl' }" @click="closeDrawer">
+              <div class="nav-icon">
+                <el-icon><Connection /></el-icon>
+              </div>
+              <span class="nav-text">TTL 文件</span>
+              <div class="nav-glow"></div>
+            </router-link>
+            <router-link v-if="authStore.canAccessMenu('jobs')" to="/jobs" class="nav-item" :class="{ active: $route.path.includes('/jobs') }" @click="closeDrawer">
+              <div class="nav-icon">
+                <el-icon><List /></el-icon>
+              </div>
+              <span class="nav-text">任务管理</span>
+              <div class="nav-glow"></div>
+            </router-link>
+          </div>
         </div>
         
-        <div class="nav-section">
-          <div class="nav-label" v-show="!sidebarCollapsed">规则引擎</div>
-          <router-link to="/rules/nlq-query" class="nav-item" :class="{ active: $route.path === '/rules/nlq-query' }">
-            <div class="nav-icon">
-              <el-icon><Search /></el-icon>
-            </div>
-            <span class="nav-text" v-show="!sidebarCollapsed">NLQ 查询</span>
-            <div class="nav-glow"></div>
-          </router-link>
-          <router-link to="/rules/manager" class="nav-item" :class="{ active: $route.path === '/rules/manager' }">
-            <div class="nav-icon">
-              <el-icon><SetUp /></el-icon>
-            </div>
-            <span class="nav-text" v-show="!sidebarCollapsed">规则管理</span>
-            <div class="nav-glow"></div>
-          </router-link>
-          <router-link to="/rules/compile-status" class="nav-item" :class="{ active: $route.path === '/rules/compile-status' }">
-            <div class="nav-icon">
-              <el-icon><Monitor /></el-icon>
-            </div>
-            <span class="nav-text" v-show="!sidebarCollapsed">编译状态</span>
-            <div class="nav-glow"></div>
-          </router-link>
+        <div class="nav-section" v-if="authStore.canAccessMenu('nlq-query') || authStore.canAccessMenu('rules-manager') || authStore.canAccessMenu('compile-status')">
+          <div class="nav-label" @click="toggleSection('rules')">
+            <span>规则引擎</span>
+            <el-icon class="collapse-arrow" :class="{ rotated: isSectionCollapsed('rules') }"><ArrowRight /></el-icon>
+          </div>
+          <div class="nav-items" v-show="!isSectionCollapsed('rules')">
+            <router-link v-if="authStore.canAccessMenu('nlq-query')" to="/rules/nlq-query" class="nav-item" :class="{ active: $route.path === '/rules/nlq-query' }" @click="closeDrawer">
+              <div class="nav-icon">
+                <el-icon><Search /></el-icon>
+              </div>
+              <span class="nav-text">NLQ 查询</span>
+              <div class="nav-glow"></div>
+            </router-link>
+            <router-link v-if="authStore.canAccessMenu('rules-manager')" to="/rules/manager" class="nav-item" :class="{ active: $route.path === '/rules/manager' }" @click="closeDrawer">
+              <div class="nav-icon">
+                <el-icon><SetUp /></el-icon>
+              </div>
+              <span class="nav-text">规则管理</span>
+              <div class="nav-glow"></div>
+            </router-link>
+            <router-link v-if="authStore.canAccessMenu('compile-status')" to="/rules/compile-status" class="nav-item" :class="{ active: $route.path === '/rules/compile-status' }" @click="closeDrawer">
+              <div class="nav-icon">
+                <el-icon><Monitor /></el-icon>
+              </div>
+              <span class="nav-text">编译状态</span>
+              <div class="nav-glow"></div>
+            </router-link>
+          </div>
         </div>
 
-        <div class="nav-section">
-          <div class="nav-label" v-show="!sidebarCollapsed">质量控制</div>
-          <router-link to="/reviews" class="nav-item" :class="{ active: $route.path === '/reviews' }">
-            <div class="nav-icon">
-              <el-icon><Check /></el-icon>
-            </div>
-            <span class="nav-text" v-show="!sidebarCollapsed">稽核管理</span>
-            <div class="nav-glow"></div>
-          </router-link>
+        <div class="nav-section" v-if="authStore.canAccessMenu('reviews')">
+          <div class="nav-label" @click="toggleSection('quality')">
+            <span>质量控制</span>
+            <el-icon class="collapse-arrow" :class="{ rotated: isSectionCollapsed('quality') }"><ArrowRight /></el-icon>
+          </div>
+          <div class="nav-items" v-show="!isSectionCollapsed('quality')">
+            <router-link v-if="authStore.canAccessMenu('reviews')" to="/reviews" class="nav-item" :class="{ active: $route.path === '/reviews' }" @click="closeDrawer">
+              <div class="nav-icon">
+                <el-icon><Check /></el-icon>
+              </div>
+              <span class="nav-text">稽核管理</span>
+              <div class="nav-glow"></div>
+            </router-link>
+          </div>
+        </div>
+
+        <div class="nav-section" v-if="authStore.canAccessMenu('graph-explorer') || authStore.canAccessMenu('instances') || authStore.canAccessMenu('versions') || authStore.canAccessMenu('sync-tasks')">
+          <div class="nav-label" @click="toggleSection('sync')">
+            <span>图谱同步</span>
+            <el-icon class="collapse-arrow" :class="{ rotated: isSectionCollapsed('sync') }"><ArrowRight /></el-icon>
+          </div>
+          <div class="nav-items" v-show="!isSectionCollapsed('sync')">
+            <router-link v-if="authStore.canAccessMenu('graph-explorer')" to="/sync/graph-explorer" class="nav-item" :class="{ active: $route.path === '/sync/graph-explorer' }" @click="closeDrawer">
+              <div class="nav-icon">
+                <el-icon><Connection /></el-icon>
+              </div>
+              <span class="nav-text">图谱浏览</span>
+              <div class="nav-glow"></div>
+            </router-link>
+            <router-link v-if="authStore.canAccessMenu('instances')" to="/sync/instances" class="nav-item" :class="{ active: $route.path === '/sync/instances' }" @click="closeDrawer">
+              <div class="nav-icon">
+                <el-icon><Monitor /></el-icon>
+              </div>
+              <span class="nav-text">实例管理</span>
+              <div class="nav-glow"></div>
+            </router-link>
+            <router-link v-if="authStore.canAccessMenu('versions')" to="/sync/versions" class="nav-item" :class="{ active: $route.path === '/sync/versions' }" @click="closeDrawer">
+              <div class="nav-icon">
+                <el-icon><Collection /></el-icon>
+              </div>
+              <span class="nav-text">版本管理</span>
+              <div class="nav-glow"></div>
+            </router-link>
+            <router-link v-if="authStore.canAccessMenu('sync-tasks')" to="/sync/tasks" class="nav-item" :class="{ active: $route.path === '/sync/tasks' }" @click="closeDrawer">
+              <div class="nav-icon">
+                <el-icon><Refresh /></el-icon>
+              </div>
+              <span class="nav-text">同步任务</span>
+              <div class="nav-glow"></div>
+            </router-link>
+          </div>
         </div>
         
-        <div class="nav-section">
-          <div class="nav-label" v-show="!sidebarCollapsed">信贷分析</div>
-          <router-link to="/loan-analysis/pre-loan" class="nav-item" :class="{ active: $route.path === '/loan-analysis/pre-loan' }">
-            <div class="nav-icon">
-              <el-icon><DocumentChecked /></el-icon>
-            </div>
-            <span class="nav-text" v-show="!sidebarCollapsed">贷前尽调</span>
-            <div class="nav-glow"></div>
-          </router-link>
-          <router-link to="/loan-analysis/post-loan" class="nav-item" :class="{ active: $route.path === '/loan-analysis/post-loan' }">
-            <div class="nav-icon">
-              <el-icon><Monitor /></el-icon>
-            </div>
-            <span class="nav-text" v-show="!sidebarCollapsed">贷后监控</span>
-            <div class="nav-glow"></div>
-          </router-link>
-          <router-link to="/loan-analysis/supply-chain" class="nav-item" :class="{ active: $route.path === '/loan-analysis/supply-chain' }">
-            <div class="nav-icon">
-              <el-icon><Share /></el-icon>
-            </div>
-            <span class="nav-text" v-show="!sidebarCollapsed">供应链金融</span>
-            <div class="nav-glow"></div>
-          </router-link>
+        <div class="nav-section" v-if="authStore.canAccessMenu('pre-loan') || authStore.canAccessMenu('post-loan') || authStore.canAccessMenu('supply-chain')">
+          <div class="nav-label" @click="toggleSection('loan')">
+            <span>信贷分析</span>
+            <el-icon class="collapse-arrow" :class="{ rotated: isSectionCollapsed('loan') }"><ArrowRight /></el-icon>
+          </div>
+          <div class="nav-items" v-show="!isSectionCollapsed('loan')">
+            <router-link v-if="authStore.canAccessMenu('pre-loan')" to="/loan-analysis/pre-loan" class="nav-item" :class="{ active: $route.path === '/loan-analysis/pre-loan' }" @click="closeDrawer">
+              <div class="nav-icon">
+                <el-icon><DocumentChecked /></el-icon>
+              </div>
+              <span class="nav-text">贷前尽调</span>
+              <div class="nav-glow"></div>
+            </router-link>
+            <router-link v-if="authStore.canAccessMenu('post-loan')" to="/loan-analysis/post-loan" class="nav-item" :class="{ active: $route.path === '/loan-analysis/post-loan' }" @click="closeDrawer">
+              <div class="nav-icon">
+                <el-icon><Monitor /></el-icon>
+              </div>
+              <span class="nav-text">贷后监控</span>
+              <div class="nav-glow"></div>
+            </router-link>
+            <router-link v-if="authStore.canAccessMenu('supply-chain')" to="/loan-analysis/supply-chain" class="nav-item" :class="{ active: $route.path === '/loan-analysis/supply-chain' }" @click="closeDrawer">
+              <div class="nav-icon">
+                <el-icon><Share /></el-icon>
+              </div>
+              <span class="nav-text">供应链金融</span>
+              <div class="nav-glow"></div>
+            </router-link>
+          </div>
+        </div>
+
+        <div class="nav-section" v-if="authStore.canAccessMenu('org-manager') || authStore.canAccessMenu('auth-scopes')">
+          <div class="nav-label" @click="toggleSection('org')">
+            <span>主体管理</span>
+            <el-icon class="collapse-arrow" :class="{ rotated: isSectionCollapsed('org') }"><ArrowRight /></el-icon>
+          </div>
+          <div class="nav-items" v-show="!isSectionCollapsed('org')">
+            <router-link v-if="authStore.canAccessMenu('org-manager')" to="/org/orgs" class="nav-item" :class="{ active: $route.path === '/org/orgs' }" @click="closeDrawer">
+              <div class="nav-icon">
+                <el-icon><OfficeBuilding /></el-icon>
+              </div>
+              <span class="nav-text">融资企业</span>
+              <div class="nav-glow"></div>
+            </router-link>
+            <router-link v-if="authStore.canAccessMenu('auth-scopes')" to="/org/auth-scopes" class="nav-item" :class="{ active: $route.path === '/org/auth-scopes' }" @click="closeDrawer">
+              <div class="nav-icon">
+                <el-icon><Lock /></el-icon>
+              </div>
+              <span class="nav-text">授权项管理</span>
+              <div class="nav-glow"></div>
+            </router-link>
+          </div>
         </div>
         
-        <div class="nav-section" v-if="authStore.isAdmin">
-          <div class="nav-label" v-show="!sidebarCollapsed">系统</div>
-          <router-link to="/users" class="nav-item" :class="{ active: $route.path === '/users' }">
-            <div class="nav-icon">
-              <el-icon><User /></el-icon>
-            </div>
-            <span class="nav-text" v-show="!sidebarCollapsed">用户管理</span>
-            <div class="nav-glow"></div>
-          </router-link>
-          <router-link to="/settings" class="nav-item" :class="{ active: $route.path === '/settings' }">
-            <div class="nav-icon">
-              <el-icon><Setting /></el-icon>
-            </div>
-            <span class="nav-text" v-show="!sidebarCollapsed">系统设置</span>
-            <div class="nav-glow"></div>
-          </router-link>
+        <div class="nav-section" v-if="authStore.canAccessMenu('agent-orgs') || authStore.canAccessMenu('agent-status') || authStore.canAccessMenu('agent-audit')">
+          <div class="nav-label" @click="toggleSection('agent')">
+            <span>代理管理</span>
+            <el-icon class="collapse-arrow" :class="{ rotated: isSectionCollapsed('agent') }"><ArrowRight /></el-icon>
+          </div>
+          <div class="nav-items" v-show="!isSectionCollapsed('agent')">
+            <router-link v-if="authStore.canAccessMenu('agent-orgs')" to="/agent/orgs" class="nav-item" :class="{ active: $route.path === '/agent/orgs' }" @click="closeDrawer">
+              <div class="nav-icon">
+                <el-icon><OfficeBuilding /></el-icon>
+              </div>
+              <span class="nav-text">企业管理</span>
+              <div class="nav-glow"></div>
+            </router-link>
+            <router-link v-if="authStore.canAccessMenu('agent-status')" to="/agent/status" class="nav-item" :class="{ active: $route.path === '/agent/status' }" @click="closeDrawer">
+              <div class="nav-icon">
+                <el-icon><Connection /></el-icon>
+              </div>
+              <span class="nav-text">代理状态</span>
+              <div class="nav-glow"></div>
+            </router-link>
+            <router-link v-if="authStore.canAccessMenu('agent-audit')" to="/agent/audit" class="nav-item" :class="{ active: $route.path === '/agent/audit' }" @click="closeDrawer">
+              <div class="nav-icon">
+                <el-icon><List /></el-icon>
+              </div>
+              <span class="nav-text">审计日志</span>
+              <div class="nav-glow"></div>
+            </router-link>
+          </div>
+        </div>
+
+        <div class="nav-section" v-if="authStore.canAccessMenu('users') || authStore.canAccessMenu('roles') || authStore.canAccessMenu('permissions') || authStore.canAccessMenu('settings')">
+          <div class="nav-label" @click="toggleSection('system')">
+            <span>系统</span>
+            <el-icon class="collapse-arrow" :class="{ rotated: isSectionCollapsed('system') }"><ArrowRight /></el-icon>
+          </div>
+          <div class="nav-items" v-show="!isSectionCollapsed('system')">
+            <router-link v-if="authStore.canAccessMenu('users')" to="/users" class="nav-item" :class="{ active: $route.path === '/users' }" @click="closeDrawer">
+              <div class="nav-icon">
+                <el-icon><User /></el-icon>
+              </div>
+              <span class="nav-text">用户管理</span>
+              <div class="nav-glow"></div>
+            </router-link>
+            <router-link v-if="authStore.canAccessMenu('roles')" to="/roles" class="nav-item" :class="{ active: $route.path === '/roles' }" @click="closeDrawer">
+              <div class="nav-icon">
+                <el-icon><Avatar /></el-icon>
+              </div>
+              <span class="nav-text">角色管理</span>
+              <div class="nav-glow"></div>
+            </router-link>
+            <router-link v-if="authStore.canAccessMenu('permissions')" to="/permissions" class="nav-item" :class="{ active: $route.path === '/permissions' }" @click="closeDrawer">
+              <div class="nav-icon">
+                <el-icon><Lock /></el-icon>
+              </div>
+              <span class="nav-text">权限管理</span>
+              <div class="nav-glow"></div>
+            </router-link>
+            <router-link v-if="authStore.canAccessMenu('settings')" to="/settings" class="nav-item" :class="{ active: $route.path === '/settings' }" @click="closeDrawer">
+              <div class="nav-icon">
+                <el-icon><Setting /></el-icon>
+              </div>
+              <span class="nav-text">系统设置</span>
+              <div class="nav-glow"></div>
+            </router-link>
+          </div>
         </div>
       </nav>
       
       <div class="sidebar-footer">
         <button class="theme-toggle" @click="toggleTheme">
           <el-icon><Sunny v-if="theme === 'dark'" /><Moon v-else /></el-icon>
-          <span v-show="!sidebarCollapsed">{{ theme === 'dark' ? '浅色模式' : '深色模式' }}</span>
+          <span >{{ theme === 'dark' ? '浅色模式' : '深色模式' }}</span>
         </button>
       </div>
     </aside>
@@ -161,6 +301,9 @@
       <!-- Header -->
       <header class="modern-header">
         <div class="header-left">
+          <button class="menu-btn" :class="{ pinned: sidebarPinned }" @click="sidebarPinned ? toggleSidebarPin() : (drawerOpen = true)" :title="sidebarPinned ? '取消固定侧边栏' : '打开菜单'">
+            <el-icon><Operation /></el-icon>
+          </button>
           <div class="breadcrumb">
             <router-link to="/dashboard" class="breadcrumb-home">
               <el-icon><HomeFilled /></el-icon>
@@ -190,7 +333,7 @@
               <div class="avatar">
                 {{ authStore.user?.username?.charAt(0).toUpperCase() || 'U' }}
               </div>
-              <div class="user-info" v-show="!sidebarCollapsed">
+              <div class="user-info" >
                 <div class="user-name">{{ authStore.user?.username || 'User' }}</div>
                 <div class="user-role">{{ authStore.isAdmin ? '管理员' : '用户' }}</div>
               </div>
@@ -231,9 +374,36 @@ import { useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { ElMessage, ElMessageBox } from 'element-plus'
 
-// Theme and sidebar state
+// Theme and drawer state
 const theme = ref('dark')
-const sidebarCollapsed = ref(false)
+const drawerOpen = ref(false)
+
+// Sidebar pinned (always visible) mode
+const sidebarPinned = ref(false)
+
+const toggleSidebarPin = () => {
+  sidebarPinned.value = !sidebarPinned.value
+  localStorage.setItem('sidebarPinned', sidebarPinned.value ? '1' : '0')
+  if (sidebarPinned.value) drawerOpen.value = false
+}
+
+// Close drawer (no-op when pinned)
+const closeDrawer = () => {
+  if (!sidebarPinned.value) drawerOpen.value = false
+}
+
+// Collapsible nav sections
+const collapsedSections = ref<Set<string>>(new Set())
+
+const toggleSection = (section: string) => {
+  if (collapsedSections.value.has(section)) {
+    collapsedSections.value.delete(section)
+  } else {
+    collapsedSections.value.add(section)
+  }
+}
+
+const isSectionCollapsed = (section: string) => collapsedSections.value.has(section)
 
 // Toggle theme
 const toggleTheme = () => {
@@ -242,11 +412,14 @@ const toggleTheme = () => {
   localStorage.setItem('theme', theme.value)
 }
 
-// Initialize theme from localStorage
+// Initialize theme and pinned state from localStorage
 onMounted(() => {
   const savedTheme = localStorage.getItem('theme') || 'dark'
   theme.value = savedTheme
   document.documentElement.setAttribute('data-theme', savedTheme)
+
+  const savedPinned = localStorage.getItem('sidebarPinned')
+  sidebarPinned.value = savedPinned === '1'
 })
 
 const route = useRoute()
@@ -268,6 +441,15 @@ const routeTitleMap: Record<string, string> = {
   'nlq-query': 'NLQ 查询',
   'rules-manager': '规则管理',
   'compile-status': '编译状态',
+  'graph-explorer': '图谱浏览',
+  'instances': '实例管理',
+  'versions': '版本管理',
+  'sync-tasks': '同步任务',
+  'org-manager': '融资企业管理',
+  'auth-scopes': '授权项管理',
+  'agent-orgs': '企业管理',
+  'agent-status': '代理状态',
+  'agent-audit': '审计日志',
 }
 
 const routeTitle = computed(() => {
@@ -359,21 +541,52 @@ const handleCommand = async (command: string) => {
   66% { transform: translate(-20px, 20px) scale(0.9); }
 }
 
-/* Sidebar */
+/* Drawer Overlay */
+.drawer-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  backdrop-filter: blur(4px);
+  z-index: 99;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.3s ease;
+}
+
+.drawer-overlay.visible {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+/* Drawer Sidebar */
 .modern-sidebar {
-  width: 260px;
-  background: var(--sidebar-bg);
-  backdrop-filter: blur(20px);
+  width: 280px;
+  background: var(--bg-secondary);
   border-right: 1px solid var(--border-color);
   display: flex;
   flex-direction: column;
-  position: relative;
-  z-index: 10;
-  transition: width 0.3s ease;
+  position: fixed;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  z-index: 100;
+  transform: translateX(-100%);
+  transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: 4px 0 24px rgba(0, 0, 0, 0.15);
 }
 
-.modern-sidebar.collapsed {
-  width: 80px;
+.modern-sidebar.open {
+  transform: translateX(0);
+}
+
+/* Pinned (always visible) — sits in normal flow, no overlay */
+.modern-sidebar.pinned {
+  position: relative;
+  transform: none !important;
+  height: 100vh;
+  flex-shrink: 0;
+  box-shadow: none;
+  border-right: 1px solid var(--border-color);
 }
 
 .sidebar-header {
@@ -412,11 +625,11 @@ const handleCommand = async (command: string) => {
   white-space: nowrap;
 }
 
-.collapse-btn {
+.close-btn {
   width: 32px;
   height: 32px;
   border: none;
-  background: var(--bg-tertiary);
+  background: transparent;
   border-radius: var(--radius-md);
   cursor: pointer;
   display: flex;
@@ -426,9 +639,34 @@ const handleCommand = async (command: string) => {
   transition: all 0.2s ease;
 }
 
-.collapse-btn:hover {
-  background: var(--bg-elevated);
+.close-btn:hover {
+  background: var(--bg-tertiary);
   color: var(--text-primary);
+}
+
+/* Pin button */
+.pin-btn {
+  width: 32px;
+  height: 32px;
+  border: none;
+  background: transparent;
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-secondary);
+  transition: all 0.2s ease;
+}
+
+.pin-btn:hover {
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+}
+
+.pin-btn.active {
+  color: var(--primary-500);
+  background: rgba(102, 126, 234, 0.12);
 }
 
 /* Navigation */
@@ -443,26 +681,50 @@ const handleCommand = async (command: string) => {
 }
 
 .nav-label {
+  font-size: 0.8rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: var(--text-secondary);
+  padding: 8px 12px;
+  margin-bottom: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  cursor: pointer;
+  border-radius: var(--radius-sm);
+  transition: all 0.2s ease;
+  user-select: none;
+}
+
+.nav-label:hover {
+  color: var(--text-secondary);
+  background: var(--bg-tertiary);
+}
+
+.collapse-arrow {
   font-size: 0.75rem;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.1em;
-  color: var(--text-muted);
-  padding: 0 12px;
-  margin-bottom: 8px;
+  transition: transform 0.25s ease;
+}
+
+.collapse-arrow.rotated {
+  transform: rotate(90deg);
+}
+
+.nav-items {
+  overflow: hidden;
 }
 
 .nav-item {
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding: 12px;
+  gap: 10px;
+  padding: 10px 12px;
   border-radius: var(--radius-md);
   color: var(--text-secondary);
   text-decoration: none;
   position: relative;
   transition: all 0.2s ease;
-  margin-bottom: 4px;
+  margin-bottom: 2px;
 }
 
 .nav-item:hover {
@@ -489,9 +751,10 @@ const handleCommand = async (command: string) => {
 }
 
 .nav-text {
-  font-size: 0.9rem;
+  font-size: 0.85rem;
   font-weight: 500;
   white-space: nowrap;
+  color: var(--text-secondary);
 }
 
 .nav-glow {
@@ -541,19 +804,46 @@ const handleCommand = async (command: string) => {
   position: relative;
   z-index: 5;
   overflow: hidden;
+  min-width: 0; /* prevent flex overflow when sidebar is pinned */
 }
 
 /* Header */
 .modern-header {
-  height: 72px;
-  background: var(--header-bg);
-  backdrop-filter: blur(20px);
+  height: 64px;
+  background: var(--bg-secondary);
   border-bottom: 1px solid var(--border-color);
   display: flex;
   align-items: center;
   justify-content: space-between;
   padding: 0 24px;
-  gap: 24px;
+  gap: 20px;
+}
+
+/* Menu Button */
+.menu-btn {
+  width: 36px;
+  height: 36px;
+  border: none;
+  background: transparent;
+  border-radius: var(--radius-md);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all 0.2s ease;
+  margin-right: 8px;
+  font-size: 1.1rem;
+}
+
+.menu-btn:hover {
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+}
+
+.menu-btn.pinned {
+  color: var(--primary-500);
+  background: rgba(102, 126, 234, 0.12);
 }
 
 .header-left {
@@ -586,6 +876,7 @@ const handleCommand = async (command: string) => {
 
 .breadcrumb-current {
   font-weight: 500;
+  font-size: 0.85rem;
   color: var(--text-primary);
 }
 
@@ -597,8 +888,8 @@ const handleCommand = async (command: string) => {
 .search-box {
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding: 10px 16px;
+  gap: 10px;
+  padding: 8px 14px;
   background: var(--bg-tertiary);
   border: 1px solid var(--border-color);
   border-radius: var(--radius-full);
@@ -615,7 +906,7 @@ const handleCommand = async (command: string) => {
   border: none;
   background: transparent;
   color: var(--text-primary);
-  font-size: 0.9rem;
+  font-size: 0.85rem;
   outline: none;
 }
 
@@ -631,10 +922,10 @@ const handleCommand = async (command: string) => {
 
 .header-btn {
   position: relative;
-  width: 40px;
-  height: 40px;
+  width: 36px;
+  height: 36px;
   border: none;
-  background: var(--bg-tertiary);
+  background: transparent;
   border-radius: var(--radius-md);
   display: flex;
   align-items: center;
@@ -645,7 +936,7 @@ const handleCommand = async (command: string) => {
 }
 
 .header-btn:hover {
-  background: var(--bg-elevated);
+  background: var(--bg-tertiary);
   color: var(--text-primary);
 }
 
@@ -663,28 +954,28 @@ const handleCommand = async (command: string) => {
 .user-profile {
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding: 6px 12px 6px 6px;
-  background: var(--bg-tertiary);
+  gap: 10px;
+  padding: 5px 12px 5px 5px;
+  background: transparent;
   border-radius: var(--radius-full);
   cursor: pointer;
   transition: all 0.2s ease;
 }
 
 .user-profile:hover {
-  background: var(--bg-elevated);
+  background: var(--bg-tertiary);
 }
 
 .avatar {
-  width: 32px;
-  height: 32px;
+  width: 30px;
+  height: 30px;
   background: var(--gradient-primary);
   border-radius: 50%;
   display: flex;
   align-items: center;
   justify-content: center;
   font-weight: 600;
-  font-size: 0.9rem;
+  font-size: 0.85rem;
   color: white;
 }
 
@@ -698,11 +989,13 @@ const handleCommand = async (command: string) => {
   font-size: 0.85rem;
   font-weight: 500;
   color: var(--text-primary);
+  line-height: 1.2;
 }
 
 .user-role {
   font-size: 0.75rem;
-  color: var(--text-muted);
+  color: var(--text-secondary);
+  line-height: 1.2;
 }
 
 .dropdown-icon {
@@ -761,22 +1054,5 @@ const handleCommand = async (command: string) => {
   font-size: 1.1rem;
 }
 
-/* Responsive */
-@media (max-width: 768px) {
-  .modern-sidebar {
-    position: fixed;
-    left: 0;
-    top: 0;
-    bottom: 0;
-    transform: translateX(-100%);
-  }
-  
-  .modern-sidebar.open {
-    transform: translateX(0);
-  }
-  
-  .header-center {
-    display: none;
-  }
-}
+/* Responsive — drawer works the same on all sizes */
 </style>

@@ -1,42 +1,9 @@
 """Unit tests for tenant-related models (GraphDB Rules Engine v2)."""
-import sys
-import types
 import pytest
 from datetime import datetime
-from unittest.mock import MagicMock
 
-# Pop conftest mocks to allow real SQLAlchemy imports
-_sqla_keys = [k for k in list(sys.modules.keys()) if k.startswith("sqlalchemy")]
-for k in _sqla_keys:
-    del sys.modules[k]
-
-for mod in [
-    "backend.app.database",
-    "backend.app.models.tenant",
-    "backend.app.models.tenant_config",
-    "backend.app.models.compile_status",
-    "backend.app.models.rule_version",
-    "backend.app.models.l2_rule",
-]:
-    sys.modules.pop(mod, None)
-
-if "asyncpg" not in sys.modules:
-    sys.modules["asyncpg"] = MagicMock()
-
-# Set up lightweight database module with real Base
-from sqlalchemy.orm import DeclarativeBase
-
-
-class _TestBase(DeclarativeBase):
-    pass
-
-
-_db_module = types.ModuleType("backend.app.database")
-_db_module.Base = _TestBase
-_db_module.async_session_factory = None
-_db_module.engine = None
-sys.modules["backend.app.database"] = _db_module
-
+# conftest.py already provides a real DeclarativeBase via backend.app.database mock.
+# Simply import models — they will use the conftest-provided Base.
 from backend.app.models.tenant import Tenant
 from backend.app.models.tenant_config import TenantConfig
 from backend.app.models.compile_status import CompileStatus

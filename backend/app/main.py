@@ -157,7 +157,7 @@ async def root():
 
 
 # Include API routers
-from backend.app.api.v1 import pipeline, files, jobs, auth, loan_analysis, query, rules, tenant, sync, explore, org, agent
+from backend.app.api.v1 import pipeline, files, jobs, auth, loan_analysis, query, rules, tenant, sync, explore, org, agent, rbac
 app.include_router(pipeline.router, prefix=settings.API_V1_STR, tags=["pipeline"])
 app.include_router(files.router, prefix=settings.API_V1_STR, tags=["files"])
 app.include_router(jobs.router, prefix=settings.API_V1_STR, tags=["jobs"])
@@ -169,6 +169,7 @@ app.include_router(tenant.router, prefix=settings.API_V1_STR, tags=["tenant"])
 app.include_router(sync.router, prefix=settings.API_V1_STR, tags=["sync"])
 app.include_router(explore.router, prefix=settings.API_V1_STR + "/explore", tags=["explore"])
 app.include_router(org.router, prefix=settings.API_V1_STR + "/org", tags=["org"])
+app.include_router(rbac.router, prefix=settings.API_V1_STR, tags=["rbac"])
 app.include_router(agent.router, prefix=settings.API_V1_STR, tags=["agent"])
 
 # Mount static files (frontend) — MUST come last so API routes take priority

@@ -52,8 +52,20 @@ class Settings(BaseSettings):
     MAX_REVISION_ROUNDS: int = 3
     CANDIDATE_LIMIT: int = 20
     
-    # CORS
-    BACKEND_CORS_ORIGINS: List[str] = ["http://localhost:3000", "http://localhost:8000"]
+    # CORS — 必须同时包含 localhost 和 127.0.0.1，因浏览器和脚本客户端可能使用不同 host
+    # 生产环境请通过 .env 的 BACKEND_CORS_ORIGINS 覆盖
+    BACKEND_CORS_ORIGINS: List[str] = [
+        "http://localhost:3000",
+        "http://localhost:5173",
+        "http://localhost:5174",
+        "http://localhost:5175",
+        "http://localhost:8000",
+        "http://127.0.0.1:3000",
+        "http://127.0.0.1:5173",
+        "http://127.0.0.1:5174",
+        "http://127.0.0.1:5175",
+        "http://127.0.0.1:8000",
+    ]
     
     class Config:
         env_file = ".env"

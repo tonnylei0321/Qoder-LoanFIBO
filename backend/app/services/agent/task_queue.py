@@ -29,7 +29,7 @@ logger = logging.getLogger(__name__)
 MAX_PENDING_TASKS = 10000
 
 # 超时阈值
-ACK_TIMEOUT_MS = 500  # ack 超时
+ACK_TIMEOUT_MS = 5000  # ack 超时（5秒，ERP代理执行SQL需要时间确认）
 EXEC_TIMEOUT_BUFFER_MS = 5000  # 执行超时额外缓冲
 
 
@@ -125,14 +125,14 @@ class TaskQueue:
         task.future = asyncio.get_event_loop().create_future()
         self._pending_tasks[msg_id] = task
 
-        # 推送到代理
+        # 推送到代理（标准信封格式，不含 timeout_ms / datasource / max_rows）
         try:
             task_msg = {
-                "type": "task",
                 "msg_id": msg_id,
-                "action": action,
+                "type": "task",
+                "tenant_id": "default",
+                "timestamp": int(datetime.now(timezone.utc).timestamp() * 1000),
                 "payload": payload,
-                "timeout_ms": timeout_ms,
             }
             await conn.ws.send_json(task_msg)
 

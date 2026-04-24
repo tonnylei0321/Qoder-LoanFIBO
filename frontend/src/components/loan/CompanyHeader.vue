@@ -82,22 +82,22 @@
 
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue'
-import { loanAnalysisApi, type Company } from '@/api/loanAnalysis'
+import { orgApi, type ApplicantOrg } from '@/api/org'
 import { ElMessage } from 'element-plus'
 
 const props = defineProps<{
-  modelValue?: string   // company id
+  modelValue?: string   // org id
   calcDate?: string
 }>()
 
 const emit = defineEmits<{
   'update:modelValue': [id: string]
-  'company-change': [company: Company]
+  'company-change': [org: ApplicantOrg]
 }>()
 
 const selectedId = ref(props.modelValue || '')
-const company = ref<Company | null>(null)
-const companyOptions = ref<Company[]>([])
+const company = ref<ApplicantOrg | null>(null)
+const companyOptions = ref<ApplicantOrg[]>([])
 const searching = ref(false)
 
 // Regulatory tag labels
@@ -111,18 +111,24 @@ const tagLabels: Record<string, string> = {
 }
 
 const activeTags = computed(() => {
-  if (!company.value) return []
-  return Object.entries(company.value.reg_tags)
+  if (!company.value?.extra) return []
+  const tags = company.value.extra as Record<string, boolean>
+  return Object.entries(tags)
     .filter(([, val]) => val)
     .map(([key]) => ({ key, label: tagLabels[key] || key }))
 })
 
 async function searchCompanies(query: string) {
-  if (!query) return
   searching.value = true
   try {
-    const result = await loanAnalysisApi.getCompanies({ search: query, page_size: 20 })
-    companyOptions.value = result.items
+    const allOrgs = await orgApi.listOrgs(true)
+    if (query) {
+      companyOptions.value = allOrgs.filter(o =>
+        o.name.includes(query) || (o.unified_code && o.unified_code.includes(query))
+      )
+    } else {
+      companyOptions.value = allOrgs
+    }
   } catch {
     // ignore
   } finally {
@@ -133,7 +139,7 @@ async function searchCompanies(query: string) {
 async function handleSelect(id: string) {
   if (!id) return
   try {
-    company.value = await loanAnalysisApi.getCompany(id)
+    company.value = await orgApi.getOrg(id)
     emit('update:modelValue', id)
     emit('company-change', company.value)
   } catch {
@@ -141,13 +147,10 @@ async function handleSelect(id: string) {
   }
 }
 
-// Load initial companies list
+// Load initial orgs list
 searchCompanies('')
-loanAnalysisApi.getCompanies({ page_size: 20 }).then(r => {
-  companyOptions.value = r.items
-})
 
-// Load company if id provided
+// Load org if id provided
 watch(() => props.modelValue, async (id) => {
   if (id && id !== selectedId.value) {
     selectedId.value = id

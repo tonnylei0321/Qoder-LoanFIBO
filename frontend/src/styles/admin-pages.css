@@ -1,0 +1,398 @@
+/**
+ * Admin Pages Global Design System
+ * Applies to all management pages (users, roles, permissions, orgs, etc.)
+ * Refined, professional fintech aesthetic
+ */
+
+/* ── Element Plus Global Overrides ─────────────────────────────────────── */
+
+/* Table: clean header with subtle background */
+.el-table {
+  --el-table-header-bg-color: var(--el-fill-color-lighter) !important;
+  --el-table-row-hover-bg-color: var(--el-color-primary-light-9) !important;
+  border-radius: 0 !important;
+}
+
+.el-table th.el-table__cell {
+  font-weight: 600 !important;
+  font-size: 12px !important;
+  letter-spacing: 0.04em !important;
+  text-transform: uppercase !important;
+  color: var(--el-text-color-secondary) !important;
+  padding: 11px 0 !important;
+}
+
+.el-table td.el-table__cell {
+  padding: 13px 0 !important;
+  font-size: 13px !important;
+}
+
+.el-table__empty-block {
+  padding: 40px 0 !important;
+}
+
+/* Card: refined shadow and radius */
+.el-card {
+  border-radius: 10px !important;
+  border: 1px solid var(--el-border-color-lighter) !important;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, .04) !important;
+}
+
+.el-card__body {
+  padding: 0 !important;
+}
+
+/* Tag: refined shape */
+.el-tag {
+  border-radius: 5px !important;
+  font-size: 11px !important;
+  font-weight: 500 !important;
+  padding: 1px 8px !important;
+}
+
+.el-tag--small {
+  height: 20px !important;
+  line-height: 18px !important;
+}
+
+/* Button: slightly more rounded */
+.el-button--small {
+  border-radius: 5px !important;
+}
+
+.el-button--default.el-button--primary {
+  border-radius: 7px !important;
+}
+
+/* Dialog: refined */
+.el-dialog {
+  border-radius: 12px !important;
+  box-shadow: 0 20px 60px rgba(0,0,0,.15) !important;
+}
+
+.el-dialog__header {
+  padding: 20px 24px 16px !important;
+  border-bottom: 1px solid var(--el-border-color-lighter) !important;
+  margin: 0 !important;
+}
+
+.el-dialog__title {
+  font-weight: 700 !important;
+  font-size: 15px !important;
+}
+
+.el-dialog__body {
+  padding: 20px 24px !important;
+}
+
+.el-dialog__footer {
+  padding: 16px 24px !important;
+  border-top: 1px solid var(--el-border-color-lighter) !important;
+}
+
+/* Form: tighter spacing */
+.el-form-item {
+  margin-bottom: 18px !important;
+}
+
+.el-form-item__label {
+  font-weight: 500 !important;
+  font-size: 13px !important;
+  color: var(--el-text-color-regular) !important;
+}
+
+/* Input: subtle inner shadow on focus */
+.el-input__wrapper {
+  border-radius: 7px !important;
+  transition: box-shadow 0.2s, border-color 0.2s !important;
+}
+
+.el-input__wrapper.is-focus {
+  box-shadow: 0 0 0 2px rgba(64, 158, 255, 0.15) !important;
+}
+
+/* Select: same radius */
+.el-select .el-input__wrapper {
+  border-radius: 7px !important;
+}
+
+/* Textarea */
+.el-textarea__inner {
+  border-radius: 7px !important;
+}
+
+/* Switch */
+.el-switch__label {
+  font-size: 12px !important;
+}
+
+/* Pagination */
+.el-pagination {
+  padding: 12px 0 !important;
+  justify-content: flex-end;
+}
+
+/* Loading overlay */
+.el-loading-mask {
+  border-radius: 10px !important;
+}
+
+/* Scrollbar in tables */
+.el-table__body-wrapper::-webkit-scrollbar {
+  height: 5px;
+  width: 5px;
+}
+
+.el-table__body-wrapper::-webkit-scrollbar-thumb {
+  background: var(--el-border-color);
+  border-radius: 10px;
+}
+
+/* ── Shared Page Layout Utilities ───────────────────────────────────────── */
+
+/* Standard page header used across admin pages */
+.admin-page-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  padding: 18px 22px;
+  background: var(--el-bg-color);
+  border: 1px solid var(--el-border-color-lighter);
+  border-radius: 10px;
+  margin-bottom: 16px;
+}
+
+.admin-page-header .title-area h2 {
+  margin: 0 0 3px;
+  font-size: 1.2rem;
+  font-weight: 700;
+  color: var(--el-text-color-primary);
+}
+
+.admin-page-header .title-area .subtitle {
+  font-size: 12px;
+  color: var(--el-text-color-secondary);
+}
+
+.admin-page-header .actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+/* Table wrapper card */
+.admin-table-card {
+  background: var(--el-bg-color);
+  border: 1px solid var(--el-border-color-lighter);
+  border-radius: 10px;
+  overflow: hidden;
+  box-shadow: 0 1px 4px rgba(0,0,0,.04);
+}
+
+/* Status pills shared */
+.pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 2px 10px;
+  border-radius: 10px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+}
+
+.pill::before {
+  content: '';
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.pill-success {
+  background: rgba(103, 194, 58, 0.1);
+  color: #52c41a;
+}
+
+.pill-success::before { background: #52c41a; }
+
+.pill-warning {
+  background: rgba(230, 162, 60, 0.1);
+  color: #e6a23c;
+}
+
+.pill-warning::before { background: #e6a23c; }
+
+.pill-info {
+  background: var(--el-fill-color);
+  color: var(--el-text-color-secondary);
+}
+
+.pill-info::before { background: var(--el-text-color-placeholder); }
+
+.pill-danger {
+  background: rgba(245, 108, 108, 0.1);
+  color: #f56c6c;
+}
+
+.pill-danger::before { background: #f56c6c; }
+
+/* User/entity avatar */
+.entity-avatar {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  font-size: 13px;
+  color: white;
+  flex-shrink: 0;
+  background: linear-gradient(135deg, var(--el-color-primary-light-3), var(--el-color-primary));
+}
+
+.entity-avatar.green {
+  background: linear-gradient(135deg, #67c23a, #4caf50);
+}
+
+.entity-avatar.orange {
+  background: linear-gradient(135deg, #e6a23c, #ff9800);
+}
+
+.entity-avatar.purple {
+  background: linear-gradient(135deg, #9c27b0, #7b1fa2);
+}
+
+/* Row with avatar + info */
+.entity-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.entity-info {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.entity-name {
+  font-weight: 600;
+  font-size: 13px;
+  color: var(--el-text-color-primary);
+  line-height: 1.3;
+}
+
+.entity-meta {
+  font-size: 11px;
+  color: var(--el-text-color-secondary);
+  line-height: 1.3;
+}
+
+/* Code badge */
+.code-badge {
+  display: inline-block;
+  padding: 1px 7px;
+  background: var(--el-fill-color);
+  border: 1px solid var(--el-border-color-lighter);
+  border-radius: 4px;
+  font-family: 'JetBrains Mono', 'Fira Code', monospace;
+  font-size: 11px;
+  color: var(--el-text-color-primary);
+  letter-spacing: 0.02em;
+}
+
+/* Monospace text */
+.mono-text {
+  font-family: 'JetBrains Mono', 'Fira Code', monospace;
+  font-size: 12px;
+  letter-spacing: 0.02em;
+}
+
+/* Empty placeholder */
+.empty-placeholder {
+  color: var(--el-text-color-placeholder);
+  font-size: 12px;
+  font-style: italic;
+}
+
+/* Left-right split layout */
+.admin-split {
+  display: flex;
+  gap: 16px;
+  min-height: 500px;
+}
+
+.admin-split-left {
+  width: 240px;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--el-border-color-lighter);
+  border-radius: 10px;
+  overflow: hidden;
+  background: var(--el-bg-color);
+}
+
+.admin-split-right {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--el-border-color-lighter);
+  border-radius: 10px;
+  overflow: hidden;
+  background: var(--el-bg-color);
+}
+
+.panel-header {
+  padding: 12px 16px;
+  font-weight: 600;
+  font-size: 13px;
+  border-bottom: 1px solid var(--el-border-color-lighter);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: var(--el-fill-color-lighter);
+  flex-shrink: 0;
+}
+
+.panel-body {
+  flex: 1;
+  overflow-y: auto;
+}
+
+/* List item in left panels */
+.list-item {
+  padding: 11px 16px;
+  cursor: pointer;
+  transition: background 0.15s;
+  border-bottom: 1px solid var(--el-border-color-extra-light);
+}
+
+.list-item:hover {
+  background: var(--el-fill-color-light);
+}
+
+.list-item.selected {
+  background: var(--el-color-primary-light-9);
+  border-left: 3px solid var(--el-color-primary);
+  padding-left: 13px;
+}
+
+/* Light/Dark theme auto-response for ambient backgrounds */
+[data-theme="light"] .admin-page-header,
+[data-theme="light"] .admin-table-card,
+[data-theme="light"] .admin-split-left,
+[data-theme="light"] .admin-split-right {
+  background: #ffffff;
+}
+
+[data-theme="dark"] .admin-page-header,
+[data-theme="dark"] .admin-table-card,
+[data-theme="dark"] .admin-split-left,
+[data-theme="dark"] .admin-split-right {
+  background: var(--bg-secondary, #1f2937);
+  border-color: var(--border-color, rgba(255,255,255,.1));
+}

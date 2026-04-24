@@ -30,17 +30,25 @@ request.interceptors.request.use(
 request.interceptors.response.use(
   (response) => {
     const { data } = response
-    // Handle business error codes
-    if (data.code !== 0) {
-      ElMessage.error(data.message || '请求失败')
-      return Promise.reject(new Error(data.message))
+    // 兼容两种后端响应格式：
+    // 1. 标准包装格式 { code: 0, data: ..., message: ... }
+    // 2. 直接返回的业务数据（explore 等新接口）
+    if (data && typeof data === 'object' && 'code' in data) {
+      // 标准包装格式
+      if (data.code !== 0) {
+        ElMessage.error(data.message || '请求失败')
+        return Promise.reject(new Error(data.message))
+      }
+      return data.data
     }
-    return data.data
+    // 直接返回的业务数据
+    return data
   },
   (error: AxiosError) => {
     const { response } = error
     
     if (response) {
+      const detail = (response.data as any)?.detail || (response.data as any)?.message || ''
       switch (response.status) {
         case 401:
           ElMessage.error('登录已过期，请重新登录')
@@ -51,13 +59,18 @@ request.interceptors.response.use(
           ElMessage.error('没有权限执行此操作')
           break
         case 404:
-          ElMessage.error('请求的资源不存在')
+          ElMessage.error(detail || '请求的资源不存在')
           break
         case 500:
-          ElMessage.error('服务器内部错误')
+          ElMessage.error(detail ? `服务器错误: ${detail}` : '服务器内部错误')
+          console.error(`[API 500] ${response.config.method?.toUpperCase()} ${response.config.url}`, response.data)
+          break
+        case 502:
+          ElMessage.error(detail || '上游服务不可用')
+          console.error(`[API 502] ${response.config.method?.toUpperCase()} ${response.config.url}`, response.data)
           break
         default:
-          ElMessage.error((response.data as any)?.message || '网络错误')
+          ElMessage.error(detail || '网络错误')
       }
     } else {
       ElMessage.error('网络连接失败')

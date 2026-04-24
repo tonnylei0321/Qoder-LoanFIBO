@@ -5,27 +5,39 @@
       <el-button @click="fetchStatus" :loading="loading">刷新</el-button>
     </div>
 
-    <div class="status-grid" v-loading="loading">
-      <el-card v-for="agent in agents" :key="`${agent.org_id}-${agent.datasource}`" class="status-card">
-        <template #header>
-          <div class="card-header">
-            <span>{{ agent.datasource }}</span>
-            <el-tag :type="statusTagType(agent.status)" effect="dark">
-              {{ agent.status }}
-            </el-tag>
-          </div>
+    <el-table :data="agents" v-loading="loading" stripe style="width: 100%">
+      <el-table-column label="企业名称" min-width="160">
+        <template #default="{ row }">
+          {{ getOrgName(row.org_id) }}
         </template>
-        <el-descriptions :column="1" size="small" border>
-          <el-descriptions-item label="企业ID">{{ agent.org_id }}</el-descriptions-item>
-          <el-descriptions-item label="数据源">{{ agent.datasource }}</el-descriptions-item>
-          <el-descriptions-item label="版本">{{ agent.version }}</el-descriptions-item>
-          <el-descriptions-item label="IP">{{ agent.ip }}</el-descriptions-item>
-          <el-descriptions-item label="最后心跳">{{ formatTime(agent.last_seen) }}</el-descriptions-item>
-        </el-descriptions>
-      </el-card>
+      </el-table-column>
+      <el-table-column prop="org_id" label="企业ID" width="280">
+        <template #default="{ row }">
+          <span style="font-family: monospace; font-size: 12px">{{ row.org_id }}</span>
+        </template>
+      </el-table-column>
+      <el-table-column label="安全ID" width="200">
+        <template #default="{ row }">
+          <span v-if="getOrgSecurityId(row.org_id)" style="font-family: monospace; font-size: 12px">{{ getOrgSecurityId(row.org_id) }}</span>
+          <span v-else style="color: var(--el-text-color-placeholder); font-size: 12px">-</span>
+        </template>
+      </el-table-column>
+      <el-table-column prop="datasource" label="数据源" width="100" />
+      <el-table-column label="链路状态" width="120">
+        <template #default="{ row }">
+          <el-tag :type="statusTagType(row.status)" effect="dark" size="small">
+            {{ row.status }}
+          </el-tag>
+        </template>
+      </el-table-column>
+      <el-table-column prop="version" label="代理版本" width="120" />
+      <el-table-column prop="ip" label="IP" width="140" />
+      <el-table-column label="最后心跳" width="180">
+        <template #default="{ row }">{{ formatTime(row.last_seen) }}</template>
+      </el-table-column>
+    </el-table>
 
-      <el-empty v-if="!loading && agents.length === 0" description="暂无在线代理" />
-    </div>
+    <el-empty v-if="!loading && agents.length === 0" description="暂无在线代理" />
   </div>
 </template>
 
@@ -42,8 +54,15 @@ interface AgentInfo {
   last_seen: string
 }
 
+interface OrgInfo {
+  org_id: string
+  name: string
+  security_id_masked?: string
+}
+
 const loading = ref(false)
 const agents = ref<AgentInfo[]>([])
+const orgMap = ref<Map<string, OrgInfo>>(new Map())
 let pollTimer: ReturnType<typeof setInterval> | null = null
 
 const fetchStatus = async () => {
@@ -56,6 +75,28 @@ const fetchStatus = async () => {
   } finally {
     loading.value = false
   }
+}
+
+const fetchOrgs = async () => {
+  try {
+    const result = (await agentApi.listOrgs()) as any
+    const orgs: OrgInfo[] = result.data || []
+    const map = new Map<string, OrgInfo>()
+    for (const org of orgs) {
+      map.set(org.org_id, org)
+    }
+    orgMap.value = map
+  } catch (e) {
+    // ignore
+  }
+}
+
+const getOrgName = (orgId: string): string => {
+  return orgMap.value.get(orgId)?.name || orgId
+}
+
+const getOrgSecurityId = (orgId: string): string | undefined => {
+  return orgMap.value.get(orgId)?.security_id_masked
 }
 
 const statusTagType = (status: string) => {
@@ -73,6 +114,7 @@ const formatTime = (iso: string) => {
 }
 
 onMounted(() => {
+  fetchOrgs()
   fetchStatus()
   // 10 秒轮询刷新
   pollTimer = setInterval(fetchStatus, 10000)
@@ -92,15 +134,5 @@ onUnmounted(() => {
   justify-content: space-between;
   align-items: center;
   margin-bottom: 20px;
-}
-.status-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
-  gap: 16px;
-}
-.card-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
 }
 </style>

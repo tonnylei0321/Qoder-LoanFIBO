@@ -13,7 +13,7 @@ class FiAlertRecord(Base):
     __tablename__ = "fi_alert_record"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    company_id = Column(UUID(as_uuid=True), ForeignKey("fi_company.id"), nullable=False, comment="企业ID")
+    company_id = Column(UUID(as_uuid=True), ForeignKey("fi_applicant_org.id"), nullable=False, comment="企业ID")
     indicator_id = Column(UUID(as_uuid=True), ForeignKey("fi_indicator.id"), nullable=False, comment="指标ID")
     alert_level = Column(String(16), nullable=False, comment="预警级别：warning / alert")
     trigger_value = Column(Numeric(20, 6), nullable=True, comment="触发时的指标值")

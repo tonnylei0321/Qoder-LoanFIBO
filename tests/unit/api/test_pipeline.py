@@ -20,7 +20,7 @@ Covered routes (11 pipeline + 2 root):
   POST /api/v1/pipeline/mappings/{table_mapping_id}/remap  (bonus)
 """
 import pytest
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 from fastapi.testclient import TestClient
 
 # ---------------------------------------------------------------------------
@@ -39,8 +39,51 @@ from backend.app.database import get_db   # noqa: E402
 
 
 async def _override_get_db():
-    """Replace real DB session with a no-op AsyncMock."""
-    yield AsyncMock()
+    """Replace real DB session with a mock that returns SQLAlchemy-like results."""
+    mock_db = AsyncMock()
+
+    # Build mock ORM objects for routes that need them
+    mock_mapping = MagicMock()
+    mock_mapping.id = 1
+    mock_mapping.job_id = 1
+    mock_mapping.database_name = "loan_db"
+    mock_mapping.table_name = "loan_application"
+    mock_mapping.fibo_class_uri = None
+    mock_mapping.confidence_level = None
+    mock_mapping.mapping_reason = None
+    mock_mapping.mapping_status = "pending"
+    mock_mapping.review_status = "pending"
+    mock_mapping.revision_count = 0
+    mock_mapping.model_used = None
+    mock_mapping.created_at = None
+    mock_mapping.is_deleted = False
+
+    mock_registry = MagicMock()
+    mock_registry.database_name = "loan_db"
+    mock_registry.table_name = "loan_application"
+    mock_registry.table_comment = "Loan application table"
+    mock_registry.parsed_fields = []
+
+    # Make db.execute() return a mock result with synchronous helper methods.
+    # SQLAlchemy Result objects have .scalar(), .scalars(), .all(), .fetchall(),
+    # .first() etc. that are synchronous (not async), so the mock must not
+    # return coroutines for these.
+    mock_result = MagicMock()
+    mock_result.scalar.return_value = 0
+    mock_result.scalar_one_or_none.return_value = None
+    mock_result.scalars.return_value.all.return_value = []
+    mock_result.all.return_value = []
+    mock_result.fetchall.return_value = []
+    mock_result.first.return_value = (mock_mapping, mock_registry)  # For get_mapping_detail
+
+    mock_db.execute = AsyncMock(return_value=mock_result)
+    mock_db.commit = AsyncMock()
+    mock_db.rollback = AsyncMock()
+    mock_db.close = AsyncMock()
+    mock_db.add = MagicMock()
+    mock_db.flush = AsyncMock()
+    mock_db.get = AsyncMock(return_value=None)
+    yield mock_db
 
 
 app.dependency_overrides[get_db] = _override_get_db

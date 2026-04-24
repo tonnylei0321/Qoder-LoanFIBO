@@ -11,26 +11,38 @@ from uuid import UUID
 class CompanyCreate(BaseModel):
     name: str = Field(..., min_length=1, max_length=256)
     unified_code: Optional[str] = Field(None, max_length=64)
+    short_name: Optional[str] = Field(None, max_length=128)
     industry: Optional[str] = Field(None, max_length=128)
     region: Optional[str] = Field(None, max_length=128)
+    legal_person: Optional[str] = Field(None, max_length=64)
+    registered_capital: Optional[str] = Field(None, max_length=64)
     reg_tags: Optional[Dict[str, Any]] = Field(default_factory=dict)
 
 
 class CompanyUpdate(BaseModel):
     name: Optional[str] = Field(None, min_length=1, max_length=256)
     unified_code: Optional[str] = Field(None, max_length=64)
+    short_name: Optional[str] = Field(None, max_length=128)
     industry: Optional[str] = Field(None, max_length=128)
     region: Optional[str] = Field(None, max_length=128)
+    legal_person: Optional[str] = Field(None, max_length=64)
+    registered_capital: Optional[str] = Field(None, max_length=64)
+    is_active: Optional[bool] = None
     reg_tags: Optional[Dict[str, Any]] = None
 
 
 class CompanyOut(BaseModel):
     id: UUID
     name: str
-    unified_code: Optional[str]
-    industry: Optional[str]
-    region: Optional[str]
-    reg_tags: Dict[str, Any]
+    unified_code: Optional[str] = None
+    short_name: Optional[str] = None
+    industry: Optional[str] = None
+    region: Optional[str] = None
+    legal_person: Optional[str] = None
+    registered_capital: Optional[str] = None
+    is_active: Optional[bool] = True
+    graph_uri: Optional[str] = None
+    reg_tags: Dict[str, Any] = {}
     created_at: datetime
 
     model_config = {"from_attributes": True}

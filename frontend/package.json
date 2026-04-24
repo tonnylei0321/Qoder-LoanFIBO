@@ -17,6 +17,7 @@
   "dependencies": {
     "@element-plus/icons-vue": "^2.3.2",
     "axios": "^1.15.0",
+    "cytoscape": "^3.33.2",
     "echarts": "^6.0.0",
     "element-plus": "^2.13.7",
     "pinia": "^3.0.4",

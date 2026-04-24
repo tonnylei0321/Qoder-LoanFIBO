@@ -13,7 +13,7 @@ class FiIndicatorValue(Base):
     __tablename__ = "fi_indicator_value"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    company_id = Column(UUID(as_uuid=True), ForeignKey("fi_company.id"), nullable=False, comment="企业ID")
+    company_id = Column(UUID(as_uuid=True), ForeignKey("fi_applicant_org.id"), nullable=False, comment="企业ID")
     indicator_id = Column(UUID(as_uuid=True), ForeignKey("fi_indicator.id"), nullable=False, comment="指标ID")
     value = Column(Numeric(20, 6), nullable=True, comment="当前值")
     value_prev = Column(Numeric(20, 6), nullable=True, comment="上期值（用于环比计算）")

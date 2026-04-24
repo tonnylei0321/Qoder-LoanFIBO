@@ -1,6 +1,7 @@
 import './assets/main.css'
 import './styles/theme.css'
 import './styles/dashboard-theme.css'
+import './styles/admin-pages.css'
 
 import { createApp } from 'vue'
 import { createPinia } from 'pinia'

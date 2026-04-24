@@ -41,3 +41,4 @@ anyio==4.7.0
 
 # Agent Service
 bcrypt==4.2.0
+passlib[bcrypt]==1.7.4

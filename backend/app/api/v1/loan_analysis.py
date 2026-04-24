@@ -11,7 +11,6 @@ from sqlalchemy import select, func, and_
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.app.database import get_db
-from backend.app.models.fi_company import FiCompany
 from backend.app.models.fi_applicant_org import FiApplicantOrg
 from backend.app.models.fi_dimension import FiDimension
 from backend.app.models.fi_indicator import FiIndicator
@@ -31,25 +30,11 @@ from backend.app.services.alert_engine import AlertEngine
 router = APIRouter(prefix="/loan-analysis", tags=["loan-analysis"])
 
 
-async def _resolve_company(company_id: UUID, db: AsyncSession) -> FiCompany:
-    """查找企业，优先 fi_company，回退 fi_applicant_org 并自动同步。"""
-    company = await db.get(FiCompany, company_id)
-    if company:
-        return company
-    # Fallback: check fi_applicant_org and auto-sync to fi_company
-    org = await db.get(FiApplicantOrg, company_id)
+async def _resolve_org(org_id: UUID, db: AsyncSession) -> FiApplicantOrg:
+    """查找融资企业。"""
+    org = await db.get(FiApplicantOrg, org_id)
     if org:
-        company = FiCompany(
-            id=org.id,
-            name=org.name,
-            unified_code=org.unified_code,
-            industry=org.industry,
-            region=org.region,
-            reg_tags={},
-        )
-        db.add(company)
-        await db.flush()
-        return company
+        return org
     raise HTTPException(status_code=404, detail="企业不存在")
 
 
@@ -63,12 +48,12 @@ async def list_companies(
     db: AsyncSession = Depends(get_db),
 ):
     """企业列表（分页+搜索）。"""
-    query = select(FiCompany)
-    count_query = select(func.count()).select_from(FiCompany)
+    query = select(FiApplicantOrg)
+    count_query = select(func.count()).select_from(FiApplicantOrg)
 
     if search:
-        query = query.where(FiCompany.name.ilike(f"%{search}%"))
-        count_query = count_query.where(FiCompany.name.ilike(f"%{search}%"))
+        query = query.where(FiApplicantOrg.name.ilike(f"%{search}%"))
+        count_query = count_query.where(FiApplicantOrg.name.ilike(f"%{search}%"))
 
     total = (await db.execute(count_query)).scalar_one()
     companies = (
@@ -81,30 +66,30 @@ async def list_companies(
 
 @router.post("/companies", response_model=ApiResponse, status_code=201)
 async def create_company(body: CompanyCreate, db: AsyncSession = Depends(get_db)):
-    """新建企业。"""
-    company = FiCompany(**body.model_dump())
-    db.add(company)
+    """新建企业（在 fi_applicant_org 中创建）。"""
+    org = FiApplicantOrg(**body.model_dump())
+    db.add(org)
     await db.flush()
-    await db.refresh(company)
-    return ApiResponse(data=CompanyOut.model_validate(company))
+    await db.refresh(org)
+    return ApiResponse(data=CompanyOut.model_validate(org))
 
 
 @router.get("/companies/{company_id}", response_model=ApiResponse)
 async def get_company(company_id: UUID, db: AsyncSession = Depends(get_db)):
     """企业详情（含监管标签）。"""
-    company = await _resolve_company(company_id, db)
-    return ApiResponse(data=CompanyOut.model_validate(company))
+    org = await _resolve_org(company_id, db)
+    return ApiResponse(data=CompanyOut.model_validate(org))
 
 
 @router.patch("/companies/{company_id}", response_model=ApiResponse)
 async def update_company(company_id: UUID, body: CompanyUpdate, db: AsyncSession = Depends(get_db)):
     """更新企业信息。"""
-    company = await _resolve_company(company_id, db)
+    org = await _resolve_org(company_id, db)
     for field, value in body.model_dump(exclude_none=True).items():
-        setattr(company, field, value)
+        setattr(org, field, value)
     await db.flush()
-    await db.refresh(company)
-    return ApiResponse(data=CompanyOut.model_validate(company))
+    await db.refresh(org)
+    return ApiResponse(data=CompanyOut.model_validate(org))
 
 
 # ─── Dimensions ──────────────────────────────────────────────────────
@@ -160,7 +145,7 @@ async def get_company_indicators(
 ):
     """企业指标值列表（按场景+日期，含维度分组信息）。"""
     # Verify company exists (also auto-syncs from fi_applicant_org)
-    await _resolve_company(company_id, db)
+    await _resolve_org(company_id, db)
 
     # If no date, find the latest available date
     if calc_date is None:
@@ -190,7 +175,7 @@ async def upsert_indicator_values(
     db: AsyncSession = Depends(get_db),
 ):
     """批量录入/更新企业指标值（自动计算环比和预警级别）。"""
-    await _resolve_company(company_id, db)
+    await _resolve_org(company_id, db)
 
     # Determine scenario from the first indicator
     if not body.values:
@@ -219,7 +204,7 @@ async def get_company_score(
     db: AsyncSession = Depends(get_db),
 ):
     """综合评分（最新或指定日期），含企业信息和预警汇总。"""
-    company = await _resolve_company(company_id, db)
+    company = await _resolve_org(company_id, db)
 
     # Resolve date
     if calc_date is None:
@@ -268,7 +253,7 @@ async def calculate_score(
     db: AsyncSession = Depends(get_db),
 ):
     """触发评分和预警计算（批处理）。"""
-    await _resolve_company(company_id, db)
+    await _resolve_org(company_id, db)
 
     # Optionally upsert new values if provided
     if body.values:
@@ -309,7 +294,7 @@ async def get_company_alerts(
     db: AsyncSession = Depends(get_db),
 ):
     """企业预警记录列表。"""
-    await _resolve_company(company_id, db)
+    await _resolve_org(company_id, db)
 
     stmt = (
         select(FiAlertRecord, FiIndicator)
@@ -348,7 +333,7 @@ async def get_indicator_history(
     db: AsyncSession = Depends(get_db),
 ):
     """指标历史趋势（从 fi_indicator_value_history 查询，支持时间范围过滤）。"""
-    await _resolve_company(company_id, db)
+    await _resolve_org(company_id, db)
 
     from backend.app.services.indicator_history import IndicatorHistoryWriter
     writer = IndicatorHistoryWriter(db)
@@ -374,7 +359,7 @@ async def write_indicator_values_with_history(
 
     values 格式: [{"indicator_id": "uuid", "value": 85.5, "value_prev": 80.0, "data_quality": "P0"}, ...]
     """
-    await _resolve_company(company_id, db)
+    await _resolve_org(company_id, db)
 
     import json as _json
     try:

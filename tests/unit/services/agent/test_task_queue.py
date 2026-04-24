@@ -80,10 +80,11 @@ class TestSubmit:
         assert result["msg_id"] is not None
         conn.ws.send_json.assert_called_once()
 
-        # 验证发送的消息
+        # 验证发送的消息（标准信封格式：msg_id, type, tenant_id, timestamp, payload）
         sent_msg = conn.ws.send_json.call_args[0][0]
         assert sent_msg["type"] == "task"
-        assert sent_msg["action"] == "query"
+        assert "action" not in sent_msg  # 标准信封格式不含 action 字段
+        assert "payload" in sent_msg  # payload 是 SQL 内容
 
     @pytest.mark.asyncio
     async def test_submit_overload_returns_service_overload(self, router, tracer):

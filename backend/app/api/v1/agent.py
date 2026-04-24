@@ -1,7 +1,8 @@
 """Agent 管理 REST API + WebSocket + SSE 端点。
 
 端点列表：
-- WS:  /agent/connect          — ERP 代理接入
+- POST /agent/oauth2/token   — OAuth2 client_credentials 模式获取 access_token
+- WS:  /agent/connect          — ERP 代理接入（支持 auth/auth_token 两种认证）
 - SSE: /agent/events           — 前端实时结果推送
 - POST /agent/orgs             — 企业注册
 - POST /agent/orgs/{org_id}/credentials — 凭证生成
@@ -50,6 +51,46 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/agent", tags=["agent"])
 
 
+def _mask_security_id(sid: str) -> str:
+    """掩码展示安全ID：保留前8位+后4位，中间用****替换。"""
+    if not sid or len(sid) <= 12:
+        return sid or ''
+    return sid[:8] + '****' + sid[-4:]
+
+
+def _extract_bearer_from_headers(websocket: WebSocket) -> str | None:
+    """从 WebSocket HTTP 握手 Header 提取 Bearer token。
+
+    支持 RFC 6455 标准的 Sec-WebSocket-Protocol 子协议传递 token，
+    也支持标准 Authorization Header（部分客户端/代理支持）。
+
+    Args:
+        websocket: FastAPI WebSocket 对象
+
+    Returns:
+        Bearer token 字符串，未找到返回 None
+    """
+    # 方式1: 标准 Authorization Header（浏览器 WebSocket API 不支持自定义 Header，
+    # 但后端代理/Python 客户端可以）
+    auth = websocket.headers.get("authorization", "")
+    if auth.lower().startswith("bearer "):
+        token = auth[7:].strip()
+        if token:
+            return token
+
+    # 方式2: Sec-WebSocket-Protocol 子协议传递
+    # 客户端发起: new WebSocket(url, ['access_token', token_value])
+    # 服务端提取: sec-websocket-protocol 头
+    protocols = websocket.headers.get("sec-websocket-protocol", "")
+    parts = [p.strip() for p in protocols.split(",")]
+    if len(parts) >= 2 and parts[0] == "access_token":
+        token = parts[1].strip()
+        if token:
+            return token
+
+    return None
+
+
 # ---------------------------------------------------------------------------
 # Pydantic 模型
 # ---------------------------------------------------------------------------
@@ -73,6 +114,67 @@ class TaskSubmitRequest(BaseModel):
     action: str
     payload: dict
     timeout_ms: int = 30000
+
+
+class OAuth2TokenRequest(BaseModel):
+    """RFC 6749 client_credentials 模式请求体。"""
+    grant_type: str = "client_credentials"
+    client_id: str
+    client_secret: str
+    scope: str = ""
+
+
+# ---------------------------------------------------------------------------
+# OAuth2 Token 端点（ERP 代理获取 access_token）
+# ---------------------------------------------------------------------------
+
+@router.post("/oauth2/token")
+async def oauth2_token(req: OAuth2TokenRequest, db: AsyncSession = Depends(get_db)):
+    """OAuth2 client_credentials 模式 — ERP 代理通过 client_id + client_secret 换取 access_token。
+
+    流程：
+    1. ERP 代理使用 agent_credential 中的 client_id + client_secret 请求 token
+    2. 服务端验证凭证，签发短期 JWT (access_token)
+    3. ERP 代理携带 access_token 连接 WebSocket
+
+    请求示例（application/x-www-form-urlencoded 或 JSON）：
+        grant_type=client_credentials&client_id=cid_xxx&client_secret=sk_xxx
+
+    响应：
+        {"access_token": "eyJ...", "token_type": "Bearer", "expires_in": 7200}
+    """
+    if req.grant_type != "client_credentials":
+        raise HTTPException(status_code=400, detail="unsupported_grant_type")
+
+    # 验证凭证
+    cred = await credential_service.verify(db, req.client_id, req.client_secret)
+    if cred is None:
+        raise HTTPException(status_code=401, detail="invalid_client")
+
+    # 签发 JWT access_token
+    from backend.app.services.auth import create_token
+    access_token = create_token(
+        payload={
+            "client_id": cred.client_id,
+            "org_id": str(cred.org_id),
+            "datasource": cred.datasource,
+            "sub": "erp-agent",
+        },
+        expires_sec=7200,
+    )
+
+    # 审计日志
+    await _write_audit_log(
+        db, str(cred.org_id), "token_issued", cred.client_id, "0.0.0.0",
+        {"grant_type": "client_credentials"},
+    )
+    await db.commit()
+
+    return {
+        "access_token": access_token,
+        "token_type": "Bearer",
+        "expires_in": 7200,
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -135,8 +237,9 @@ async def ws_connect(websocket: WebSocket):
 
     安全设计：
     1. IP 速率限制（10次/分钟）
-    2. 首条消息 auth 认证（非 query param）
-    3. register 5秒超时断开
+    2. 支持 Authorization: Bearer {token} Header 认证（优先）
+    3. 首条消息 auth/auth_token 认证（备选）
+    4. register 5秒超时断开
     """
     # IP 速率限制
     client_ip = websocket.client.host if websocket.client else "unknown"
@@ -144,6 +247,9 @@ async def ws_connect(websocket: WebSocket):
     if not limiter.is_allowed(client_ip):
         await websocket.close(code=429, reason="rate limit exceeded")
         return
+
+    # 尝试从 Authorization Header 提取 Bearer token
+    header_token = _extract_bearer_from_headers(websocket)
 
     await websocket.accept()
 
@@ -153,7 +259,8 @@ async def ws_connect(websocket: WebSocket):
         try:
             handler = get_ws_handler()
             await handler.handle_connection(
-                websocket, db_session=db, client_ip=client_ip
+                websocket, db_session=db, client_ip=client_ip,
+                header_token=header_token,
             )
         finally:
             await db.commit()
@@ -201,6 +308,52 @@ async def sse_events(
 
 
 # ---------------------------------------------------------------------------
+# 企业列表（10.0）
+# ---------------------------------------------------------------------------
+
+@router.get("/orgs")
+async def list_orgs(
+    search: Optional[str] = Query(None),
+    limit: int = Query(50, le=200),
+    offset: int = Query(0),
+    db: AsyncSession = Depends(get_db),
+):
+    """查询企业列表（含每个企业的凭证数量和最新凭证信息）。"""
+    from sqlalchemy.orm import selectinload
+
+    # 查企业
+    stmt = select(FiApplicantOrg).order_by(FiApplicantOrg.created_at.desc())
+    count_stmt = select(func.count()).select_from(FiApplicantOrg)
+
+    if search:
+        stmt = stmt.where(FiApplicantOrg.name.ilike(f"%{search}%"))
+        count_stmt = count_stmt.where(FiApplicantOrg.name.ilike(f"%{search}%"))
+
+    total = (await db.execute(count_stmt)).scalar() or 0
+
+    stmt = stmt.offset(offset).limit(limit)
+    result = await db.execute(stmt)
+    orgs = list(result.scalars().all())
+
+    # 查每个企业的凭证
+    data = []
+    for org in orgs:
+        creds = await credential_service.get_by_org(db, str(org.id))
+        data.append({
+            "org_id": str(org.id),
+            "name": org.name,
+            "industry": org.industry,
+            "datasource": creds[0].datasource if creds else "NCC",
+            "security_id_masked": _mask_security_id(org.security_id) if org.security_id else None,
+            "credential_count": len(creds),
+            "active_credential_count": sum(1 for c in creds if c.revoked_at is None),
+            "created_at": org.created_at.isoformat() if org.created_at else None,
+        })
+
+    return {"code": 0, "data": data, "total": total}
+
+
+# ---------------------------------------------------------------------------
 # 企业注册（10.1）
 # ---------------------------------------------------------------------------
 
@@ -216,6 +369,9 @@ async def register_org(
         name=req.name,
         industry=req.industry,
     )
+    # 自动生成安全ID
+    import secrets
+    org.security_id = f"sid_{secrets.token_hex(16)}"
     db.add(org)
     await db.flush()
     org_id = str(org.id)
@@ -237,6 +393,7 @@ async def register_org(
         "data": {
             "org_id": org_id,
             "name": req.name,
+            "security_id": org.security_id,
             "credential": cred_result,
         },
     }
@@ -245,6 +402,27 @@ async def register_org(
 # ---------------------------------------------------------------------------
 # 凭证管理（10.2）
 # ---------------------------------------------------------------------------
+
+@router.get("/orgs/{org_id}/credentials")
+async def list_credentials(
+    org_id: str,
+    db: AsyncSession = Depends(get_db),
+    admin: dict = Depends(get_current_admin),
+):
+    """查询企业下所有凭证（client_secret 不返回，仅显示状态）。"""
+    creds = await credential_service.get_by_org(db, org_id)
+    data = [
+        {
+            "client_id": c.client_id,
+            "datasource": c.datasource,
+            "revoked": c.revoked_at is not None,
+            "revoked_at": c.revoked_at.isoformat() if c.revoked_at else None,
+            "created_at": c.created_at.isoformat() if c.created_at else None,
+        }
+        for c in creds
+    ]
+    return {"code": 0, "data": data}
+
 
 @router.post("/orgs/{org_id}/credentials")
 async def create_credential(

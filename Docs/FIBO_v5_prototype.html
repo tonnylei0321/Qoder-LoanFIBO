@@ -1,0 +1,1344 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>FIBO — 信贷指标体系 v5</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=DM+Sans:wght@300;400;500&family=JetBrains+Mono:wght@300;400&display=swap" rel="stylesheet">
+<style>
+:root{
+  --ink:#0c0e12;--ink-mid:#1e2330;--ink-soft:#3a4155;
+  --smoke:#f0f1f3;--mist:#e4e6eb;--white:#ffffff;
+  --gold:#c9a84c;--gold-lt:#faf6ec;
+  --teal:#1a7f6e;--teal-lt:#d0ede9;
+  --red:#c0392b;--red-lt:#fce8e6;
+  --blue:#1d4ed8;--blue-lt:#eff6ff;
+  --amber:#b45309;--amber-lt:#fef3c7;
+  --purple:#6d28d9;--purple-lt:#ede9fe;
+  --scf:#0e6b8f;--scf-lt:#e0f4fa;
+  --serif:'DM Serif Display',Georgia,serif;
+  --sans:'DM Sans',system-ui,sans-serif;
+  --mono:'JetBrains Mono',monospace;
+  --r:6px;--r-lg:12px;
+  --shadow:0 2px 8px rgba(12,14,18,.09);
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:var(--sans);background:var(--smoke);color:var(--ink);font-size:14px;line-height:1.6;overflow-x:hidden}
+@keyframes fadeUp{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:translateY(0)}}
+@keyframes fadeIn{from{opacity:0}to{opacity:1}}
+@keyframes slideIn{from{transform:translateX(60px);opacity:0}to{transform:translateX(0);opacity:1}}
+.fu{animation:fadeUp .42s ease both}
+.fu1{animation-delay:.07s}.fu2{animation-delay:.14s}.fu3{animation-delay:.21s}
+
+/* ── Topbar ── */
+.topbar{height:54px;background:var(--white);border-bottom:1px solid var(--mist);display:flex;align-items:center;padding:0 22px;position:sticky;top:0;z-index:100;box-shadow:0 1px 0 rgba(0,0,0,.04)}
+.tb-brand{display:flex;align-items:center;gap:9px;margin-right:24px}
+.tb-mark{width:27px;height:27px;border:1.5px solid var(--gold);display:flex;align-items:center;justify-content:center;font-family:var(--serif);font-size:13px;color:var(--gold)}
+.tb-name{font-family:var(--serif);font-size:17px;color:var(--ink)}
+.tb-nav{display:flex;gap:3px;flex:1}
+.ni{padding:5px 12px;border-radius:var(--r);font-size:12px;color:var(--ink-soft);cursor:pointer;border:none;background:none;font-family:var(--sans);transition:all .14s;white-space:nowrap}
+.ni:hover{background:var(--smoke);color:var(--ink)}
+.ni.on{background:var(--ink);color:var(--white)}
+.tb-right{display:flex;align-items:center;gap:9px}
+.user-badge{display:flex;align-items:center;gap:7px;padding:4px 10px 4px 5px;border:1px solid var(--mist);border-radius:24px}
+.ua{width:24px;height:24px;border-radius:50%;background:var(--teal-lt);color:var(--teal);display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:500}
+.uname{font-size:11px;font-weight:500}.urole{font-size:9px;color:var(--ink-soft)}
+
+/* ── Page ── */
+.page{display:none;padding:22px;max-width:1280px;margin:0 auto;width:100%}
+.page.on{display:block}
+.ph{margin-bottom:18px}
+.pt{font-family:var(--serif);font-size:24px;font-weight:400;color:var(--ink)}
+.ps{font-size:12px;color:var(--ink-soft);margin-top:3px}
+.ps strong{color:var(--teal);font-weight:500}
+
+/* ── 场景概览 ── */
+.scn-intro{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:18px}
+.scn-intro-item{background:var(--white);border:1px solid var(--mist);border-radius:var(--r-lg);padding:14px 16px;display:flex;align-items:center;gap:12px;box-shadow:var(--shadow)}
+.scn-intro-ico{width:38px;height:38px;border-radius:50%;background:var(--gold-lt);color:var(--gold);display:flex;align-items:center;justify-content:center;font-size:18px}
+.scn-intro-lbl{font-size:10px;color:var(--ink-soft);text-transform:uppercase;letter-spacing:.06em}
+.scn-intro-val{font-family:var(--serif);font-size:18px;color:var(--ink);margin-top:2px}
+
+/* ── 指标布局 ── */
+.ind-layout{display:grid;grid-template-columns:200px 1fr;gap:18px}
+.dim-nav{background:var(--white);border:1px solid var(--mist);border-radius:var(--r-lg);padding:14px;position:sticky;top:70px;height:fit-content;box-shadow:var(--shadow)}
+.dn-title{font-size:10px;font-weight:500;color:var(--ink-soft);text-transform:uppercase;letter-spacing:.08em;margin-bottom:10px}
+.dn-item{padding:8px 10px;border-radius:var(--r);font-size:12px;color:var(--ink-mid);cursor:pointer;display:flex;align-items:center;gap:8px;transition:all .12s;margin-bottom:3px}
+.dn-item:hover{background:var(--smoke)}
+.dn-item.on{background:var(--ink);color:var(--white)}
+.dn-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
+.dn-cnt{margin-left:auto;font-family:var(--mono);font-size:10px;background:var(--smoke);color:var(--ink-soft);padding:1px 6px;border-radius:10px}
+.dn-item.on .dn-cnt{background:rgba(255,255,255,.18);color:var(--white)}
+
+.ind-sections{display:flex;flex-direction:column;gap:16px}
+.ind-sec{background:var(--white);border:1px solid var(--mist);border-radius:var(--r-lg);padding:18px;box-shadow:var(--shadow)}
+.is-hd{display:flex;align-items:center;gap:12px;margin-bottom:14px;padding-bottom:12px;border-bottom:1px solid var(--mist)}
+.is-ico{width:32px;height:32px;border-radius:var(--r);display:flex;align-items:center;justify-content:center;font-size:17px}
+.is-title{font-family:var(--serif);font-size:17px;color:var(--ink);flex:1}
+.is-count{font-size:11px;color:var(--ink-soft);font-family:var(--mono);background:var(--smoke);padding:3px 9px;border-radius:10px}
+
+/* ── 指标表格 ── */
+.it{width:100%;border-collapse:collapse;font-size:12px}
+.it thead th{text-align:left;font-weight:500;color:var(--ink-soft);font-size:10px;text-transform:uppercase;letter-spacing:.05em;padding:9px 10px;border-bottom:1px solid var(--mist)}
+.it tbody td{padding:11px 10px;border-bottom:1px solid var(--smoke);vertical-align:top}
+.it tbody tr:last-child td{border-bottom:none}
+.it tbody tr.clickable{cursor:pointer;transition:all .12s}
+.it tbody tr.clickable:hover{background:var(--gold-lt)}
+.ind-nm{font-weight:500;color:var(--ink);margin-bottom:2px}
+.ind-fibo{font-family:var(--mono);font-size:10px;color:var(--ink-soft)}
+.ind-desc{font-size:12px;color:var(--ink-mid);line-height:1.55}
+.cv-tags{display:flex;flex-wrap:wrap;gap:4px}
+.sf{font-size:10px;background:var(--smoke);color:var(--ink-soft);padding:2px 7px;border-radius:3px;white-space:nowrap;font-family:var(--sans)}
+.det-btn{padding:5px 10px;background:var(--ink);color:var(--white);border:none;border-radius:var(--r);font-size:10px;cursor:pointer;font-family:var(--sans);transition:all .14s;white-space:nowrap}
+.det-btn:hover{background:var(--ink-soft)}
+
+/* ── 抽屉 ── */
+.dov{position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(12,14,18,.4);z-index:200;display:none;animation:fadeIn .22s ease}
+.dov.on{display:block}
+.drw{position:fixed;top:0;right:0;bottom:0;width:720px;max-width:92vw;background:var(--white);box-shadow:-8px 0 30px rgba(12,14,18,.16);overflow-y:auto;animation:slideIn .32s cubic-bezier(.2,.8,.2,1) both;z-index:201}
+.dr-hd{position:sticky;top:0;background:var(--white);border-bottom:1px solid var(--mist);padding:16px 22px;z-index:10}
+.dr-title{display:flex;align-items:center;gap:10px;justify-content:space-between}
+.dr-name{font-family:var(--serif);font-size:20px;color:var(--ink)}
+.dr-close{width:28px;height:28px;border-radius:50%;background:var(--smoke);color:var(--ink-soft);border:none;cursor:pointer;font-size:16px;display:flex;align-items:center;justify-content:center;transition:all .14s}
+.dr-close:hover{background:var(--red-lt);color:var(--red)}
+.dr-dim{font-size:11px;color:var(--ink-soft);margin-top:3px}
+
+.drw-body{padding:20px 22px}
+.sec-card{border:1px solid var(--mist);border-radius:var(--r-lg);padding:16px;margin-bottom:14px;background:var(--white)}
+.sec-card.gold{background:var(--gold-lt);border-color:#e8d898}
+.sec-st{font-size:10px;font-weight:500;color:var(--ink-soft);text-transform:uppercase;letter-spacing:.08em;margin-bottom:10px;display:flex;align-items:center;gap:6px}
+.sec-st-icon{font-size:13px}
+
+.val-hero{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:18px}
+.vh-block{background:var(--white);border:1px solid var(--mist);border-radius:var(--r-lg);padding:14px 16px}
+.vh-lbl{font-size:10px;color:var(--ink-soft);text-transform:uppercase;letter-spacing:.06em}
+.vh-val{font-family:var(--serif);font-size:18px;color:var(--ink);margin-top:4px}
+.vh-val.small{font-size:14px;font-family:var(--mono)}
+
+.formula-box{background:#fafbfc;border:1px solid var(--mist);border-radius:var(--r);padding:12px 14px;font-family:var(--mono);font-size:12px;color:var(--ink);line-height:1.7}
+
+.chip-list{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
+.chip{background:var(--smoke);padding:4px 10px;border-radius:14px;font-size:11px;color:var(--ink-mid)}
+.chip.gold{background:var(--gold-lt);color:var(--ink)}
+.chip.teal{background:var(--teal-lt);color:var(--teal)}
+.chip.blue{background:var(--blue-lt);color:var(--blue)}
+.chip.purple{background:var(--purple-lt);color:var(--purple)}
+.chip .c-code{font-family:var(--mono);font-size:10px;opacity:.7;margin-right:4px}
+
+.fibo-box{background:var(--gold-lt);border:1px solid #e8d898;border-radius:var(--r-lg);padding:12px 14px}
+.fibo-item{display:flex;justify-content:space-between;align-items:center;padding:5px 0;font-size:11px}
+.fibo-item:not(:last-child){border-bottom:1px dashed rgba(201,168,76,.3)}
+.fibo-zh{color:var(--ink)}
+.fibo-uri{font-family:var(--mono);color:var(--ink-soft);font-size:10px}
+
+.table-grp{margin-bottom:10px}
+.table-grp-hd{font-size:12px;font-weight:500;color:var(--ink);margin-bottom:6px}
+.field-list{display:flex;flex-wrap:wrap;gap:5px}
+.field-chip{background:var(--white);border:1px solid var(--mist);padding:4px 9px;border-radius:4px;font-size:10px;color:var(--ink-mid)}
+.field-chip .fc-code{font-family:var(--mono);color:var(--ink-soft);font-size:9px;margin-right:4px}
+
+.sql-box{background:#1e2330;color:#f0f1f3;border-radius:var(--r-lg);padding:14px 16px;font-family:var(--mono);font-size:11px;line-height:1.7;overflow-x:auto;max-height:360px;overflow-y:auto;white-space:pre}
+.sql-box .cm{color:#94a3b8}
+.sql-box .kw{color:#f59e0b}
+.sql-box .str{color:#86efac}
+.sql-box .num{color:#60a5fa}
+
+.onto-graph{background:#fafbfc;border:1px solid var(--mist);border-radius:var(--r-lg);padding:14px;margin-bottom:14px}
+.onto-node{display:inline-block;padding:4px 10px;border-radius:14px;font-size:11px;margin:3px}
+.onto-node.ind{background:var(--purple-lt);color:var(--purple)}
+.onto-node.rule{background:var(--amber-lt);color:var(--amber)}
+.onto-node.val{background:var(--teal-lt);color:var(--teal)}
+.onto-arrow{color:var(--ink-soft);margin:0 4px}
+
+.tabs{display:flex;gap:2px;border-bottom:1px solid var(--mist);margin-bottom:14px}
+.tab{padding:8px 14px;font-size:12px;color:var(--ink-soft);cursor:pointer;border-bottom:2px solid transparent;transition:all .14s}
+.tab.on{color:var(--ink);border-bottom-color:var(--ink);font-weight:500}
+.tab-body{display:none}
+.tab-body.on{display:block}
+
+@media (max-width: 900px){
+  .ind-layout{grid-template-columns:1fr}
+  .dim-nav{position:static}
+  .scn-intro{grid-template-columns:repeat(2,1fr)}
+}
+</style>
+</head>
+<body>
+
+<nav class="topbar">
+  <div class="tb-brand"><div class="tb-mark">F</div><div class="tb-name">FIBO 信贷指标体系</div></div>
+  <div class="tb-nav">
+    <button class="ni on" onclick="goPage('pre',this)">贷前尽调 (50 项)</button>
+    <button class="ni" onclick="goPage('post',this)">贷后监控 (6 项)</button>
+    <button class="ni" onclick="goPage('scf',this)" style="border-left:2px solid var(--scf-lt);margin-left:4px">供应链金融 (20 项)</button>
+  </div>
+  <div class="tb-right">
+    <span style="font-size:10px;color:var(--ink-soft);margin-right:8px">本体版本 <strong style="color:var(--ink);font-family:var(--mono)">v1.4</strong></span>
+    <div class="user-badge">
+      <div class="ua">李</div>
+      <div><div class="uname">李晓华</div><div class="urole">信贷风控 · 招商银行</div></div>
+    </div>
+  </div>
+</nav>
+
+
+<div class="page on" id="p-pre">
+  <div class="ph fu">
+    <div class="pt">贷前指标体系</div>
+    <div class="ps">贷款审批前对企业的财务健康度、经营能力、融资历史、担保情况的全面尽调分析 · 共 <strong>50</strong> 项简单指标(难度 1)· 点击任意指标查看公式/SQL/数据来源</div>
+  </div>
+
+  <div class="scn-intro fu fu1">
+    <div class="scn-intro-item">
+      <div class="scn-intro-ico">📊</div>
+      <div>
+        <div class="scn-intro-lbl">指标总数</div>
+        <div class="scn-intro-val">50 项</div>
+      </div>
+    </div>
+    <div class="scn-intro-item">
+      <div class="scn-intro-ico">🗂️</div>
+      <div>
+        <div class="scn-intro-lbl">业务主题</div>
+        <div class="scn-intro-val">8 个</div>
+      </div>
+    </div>
+    <div class="scn-intro-item">
+      <div class="scn-intro-ico">⚡</div>
+      <div>
+        <div class="scn-intro-lbl">复杂度</div>
+        <div class="scn-intro-val">单表聚合</div>
+      </div>
+    </div>
+    <div class="scn-intro-item">
+      <div class="scn-intro-ico">✓</div>
+      <div>
+        <div class="scn-intro-lbl">数据字段</div>
+        <div class="scn-intro-val">100% 对齐 NCC</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="ind-layout fu fu2">
+    <div class="dim-nav">
+      <div class="dn-title">业务主题导航</div>
+      <div class="dn-item on" onclick="scrollTo2('sec-pre-偿债能力');selDn(this)">
+          <div class="dn-dot" style="background:var(--amber)"></div>
+          偿债能力<div class="dn-cnt">7</div>
+        </div><div class="dn-item" onclick="scrollTo2('sec-pre-盈利能力');selDn(this)">
+          <div class="dn-dot" style="background:var(--teal)"></div>
+          盈利能力<div class="dn-cnt">9</div>
+        </div><div class="dn-item" onclick="scrollTo2('sec-pre-客户结构');selDn(this)">
+          <div class="dn-dot" style="background:var(--blue)"></div>
+          客户结构<div class="dn-cnt">6</div>
+        </div><div class="dn-item" onclick="scrollTo2('sec-pre-供应商结构');selDn(this)">
+          <div class="dn-dot" style="background:var(--blue)"></div>
+          供应商结构<div class="dn-cnt">6</div>
+        </div><div class="dn-item" onclick="scrollTo2('sec-pre-合同');selDn(this)">
+          <div class="dn-dot" style="background:var(--purple)"></div>
+          合同<div class="dn-cnt">6</div>
+        </div><div class="dn-item" onclick="scrollTo2('sec-pre-融资历史');selDn(this)">
+          <div class="dn-dot" style="background:var(--amber)"></div>
+          融资历史<div class="dn-cnt">5</div>
+        </div><div class="dn-item" onclick="scrollTo2('sec-pre-担保质押');selDn(this)">
+          <div class="dn-dot" style="background:var(--purple)"></div>
+          担保质押<div class="dn-cnt">7</div>
+        </div><div class="dn-item" onclick="scrollTo2('sec-pre-资产规模');selDn(this)">
+          <div class="dn-dot" style="background:var(--teal)"></div>
+          资产规模<div class="dn-cnt">4</div>
+        </div>
+      <div style="margin-top:14px;padding-top:12px;border-top:1px solid var(--mist)">
+        <div style="font-size:9px;color:var(--ink-soft);margin-bottom:5px">数据说明</div>
+        <div style="font-size:10px;color:var(--ink-soft);line-height:1.7">
+          所有指标字段均已对照<br>用友 NCC 真实 DDL 校验<br>SQL 可直接执行
+        </div>
+      </div>
+    </div>
+
+    <div class="ind-sections">
+      
+      <div class="ind-sec" id="sec-pre-偿债能力">
+        <div class="is-hd">
+          <div class="is-ico" style="background:var(--amber-lt);color:var(--amber)">⚖</div>
+          <span class="is-title">偿债能力</span>
+          <span class="is-count">7 项指标</span>
+        </div>
+        <table class="it">
+          <thead><tr>
+            <th style="width:22%">指标名称 / 编号</th>
+            <th style="width:36%">业务口径</th>
+            <th style="width:32%">数据来源</th>
+            <th style="width:10%">详情</th>
+          </tr></thead>
+          <tbody>
+        <tr class="clickable" onclick="openDrawer('PRE-SOLV-01')">
+          <td><div class="ind-nm">流动比率</div><div class="ind-fibo">PRE-SOLV-01</div></td>
+          <td><div class="ind-desc">衡量企业短期偿债能力,值越大越能用流动资产覆盖短期债务</div></td>
+          <td><div class="cv-tags"><span class="sf">总账余额表</span></div></td>
+          <td><button class="det-btn" onclick="event.stopPropagation();openDrawer('PRE-SOLV-01')">查看详情</button></td>
+        </tr>
+        <tr class="clickable" onclick="openDrawer('PRE-SOLV-03')">
+          <td><div class="ind-nm">现金比率</div><div class="ind-fibo">PRE-SOLV-03</div></td>
+          <td><div class="ind-desc">最严格的流动性指标,只看现金类资产对短期负债的覆盖</div></td>
+          <td><div class="cv-tags"><span class="sf">总账余额表</span></div></td>
+          <td><button class="det-btn" onclick="event.stopPropagation();openDrawer('PRE-SOLV-03')">查看详情</button></td>
+        </tr>
+        <tr class="clickable" onclick="openDrawer('PRE-SOLV-04')">
+          <td><div class="ind-nm">资产负债率</div><div class="ind-fibo">PRE-SOLV-04</div></td>
+          <td><div class="ind-desc">负债占总资产的比例,反映企业整体财务杠杆水平</div></td>
+          <td><div class="cv-tags"><span class="sf">总账余额表</span></div></td>
+          <td><button class="det-btn" onclick="event.stopPropagation();openDrawer('PRE-SOLV-04')">查看详情</button></td>
+        </tr>
+        <tr class="clickable" onclick="openDrawer('PRE-SOLV-05')">
+          <td><div class="ind-nm">权益比率</div><div class="ind-fibo">PRE-SOLV-05</div></td>
+          <td><div class="ind-desc">所有者权益占总资产比例,数值越高企业自有资本越充足</div></td>
+          <td><div class="cv-tags"><span class="sf">总账余额表</span></div></td>
+          <td><button class="det-btn" onclick="event.stopPropagation();openDrawer('PRE-SOLV-05')">查看详情</button></td>
+        </tr>
+        <tr class="clickable" onclick="openDrawer('PRE-SOLV-06')">
+          <td><div class="ind-nm">产权比率</div><div class="ind-fibo">PRE-SOLV-06</div></td>
+          <td><div class="ind-desc">负债与权益的比例,衡量企业债务与股东投入的平衡</div></td>
+          <td><div class="cv-tags"><span class="sf">总账余额表</span></div></td>
+          <td><button class="det-btn" onclick="event.stopPropagation();openDrawer('PRE-SOLV-06')">查看详情</button></td>
+        </tr>
+        <tr class="clickable" onclick="openDrawer('PRE-SOLV-07')">
+          <td><div class="ind-nm">股东权益乘数</div><div class="ind-fibo">PRE-SOLV-07</div></td>
+          <td><div class="ind-desc">总资产是所有者权益的几倍,反映财务杠杆倍数</div></td>
+          <td><div class="cv-tags"><span class="sf">总账余额表</span></div></td>
+          <td><button class="det-btn" onclick="event.stopPropagation();openDrawer('PRE-SOLV-07')">查看详情</button></td>
+        </tr>
+        <tr class="clickable" onclick="openDrawer('PRE-SOLV-08')">
+          <td><div class="ind-nm">长期负债占比</div><div class="ind-fibo">PRE-SOLV-08</div></td>
+          <td><div class="ind-desc">长期负债占总资产比例,衡量长期偿债压力</div></td>
+          <td><div class="cv-tags"><span class="sf">总账余额表</span></div></td>
+          <td><button class="det-btn" onclick="event.stopPropagation();openDrawer('PRE-SOLV-08')">查看详情</button></td>
+        </tr></tbody>
+        </table>
+      </div>
+      <div class="ind-sec" id="sec-pre-盈利能力">
+        <div class="is-hd">
+          <div class="is-ico" style="background:var(--teal-lt);color:var(--teal)">💰</div>
+          <span class="is-title">盈利能力</span>
+          <span class="is-count">9 项指标</span>
+        </div>
+        <table class="it">
+          <thead><tr>
+            <th style="width:22%">指标名称 / 编号</th>
+            <th style="width:36%">业务口径</th>
+            <th style="width:32%">数据来源</th>
+            <th style="width:10%">详情</th>
+          </tr></thead>
+          <tbody>
+        <tr class="clickable" onclick="openDrawer('PRE-PROF-01')">
+          <td><div class="ind-nm">毛利率</div><div class="ind-fibo">PRE-PROF-01</div></td>
+          <td><div class="ind-desc">毛利占收入的比例,反映产品/服务本身的盈利空间</div></td>
+          <td><div class="cv-tags"><span class="sf">总账余额表</span></div></td>
+          <td><button class="det-btn" onclick="event.stopPropagation();openDrawer('PRE-PROF-01')">查看详情</button></td>
+        </tr>
+        <tr class="clickable" onclick="openDrawer('PRE-PROF-02')">
+          <td><div class="ind-nm">净利率</div><div class="ind-fibo">PRE-PROF-02</div></td>
+          <td><div class="ind-desc">净利润占收入比例,反映整体盈利水平</div></td>
+          <td><div class="cv-tags"><span class="sf">总账余额表</span></div></td>
+          <td><button class="det-btn" onclick="event.stopPropagation();openDrawer('PRE-PROF-02')">查看详情</button></td>
+        </tr>
+        <tr class="clickable" onclick="openDrawer('PRE-PROF-03')">
+          <td><div class="ind-nm">营业利润率</div><div class="ind-fibo">PRE-PROF-03</div></td>
+          <td><div class="ind-desc">营业利润占收入比例,剔除非经营性损益后的盈利能力</div></td>
+          <td><div class="cv-tags"><span class="sf">总账余额表</span></div></td>
+          <td><button class="det-btn" onclick="event.stopPropagation();openDrawer('PRE-PROF-03')">查看详情</button></td>
+        </tr>
+        <tr class="clickable" onclick="openDrawer('PRE-PROF-04')">
+          <td><div class="ind-nm">主营业务利润率</div><div class="ind-fibo">PRE-PROF-04</div></td>
+          <td><div class="ind-desc">主营业务(剔除其他业务)的毛利率,反映核心业务盈利能力</div></td>
+          <td><div class="cv-tags"><span class="sf">总账余额表</span></div></td>
+          <td><button class="det-btn" onclick="event.stopPropagation();openDrawer('PRE-PROF-04')">查看详情</button></td>
+        </tr>
+        <tr class="clickable" onclick="openDrawer('PRE-PROF-05')">
+          <td><div class="ind-nm">销售费用率</div><div class="ind-fibo">PRE-PROF-05</div></td>
+          <td><div class="ind-desc">销售费用占收入比例,反映销售成本压力</div></td>
+          <td><div class="cv-tags"><span class="sf">总账余额表</span></div></td>
+          <td><button class="det-btn" onclick="event.stopPropagation();openDrawer('PRE-PROF-05')">查看详情</button></td>
+        </tr>
+        <tr class="clickable" onclick="openDrawer('PRE-PROF-06')">
+          <td><div class="ind-nm">管理费用率</div><div class="ind-fibo">PRE-PROF-06</div></td>
+          <td><div class="ind-desc">管理费用占收入比例,反映行政管理成本压力</div></td>
+          <td><div class="cv-tags"><span class="sf">总账余额表</span></div></td>
+          <td><button class="det-btn" onclick="event.stopPropagation();openDrawer('PRE-PROF-06')">查看详情</button></td>
+        </tr>
+        <tr class="clickable" onclick="openDrawer('PRE-PROF-07')">
+          <td><div class="ind-nm">财务费用率</div><div class="ind-fibo">PRE-PROF-07</div></td>
+          <td><div class="ind-desc">财务费用占收入比例,反映融资成本压力</div></td>
+          <td><div class="cv-tags"><span class="sf">总账余额表</span></div></td>
+          <td><button class="det-btn" onclick="event.stopPropagation();openDrawer('PRE-PROF-07')">查看详情</button></td>
+        </tr>
+        <tr class="clickable" onclick="openDrawer('PRE-PROF-08')">
+          <td><div class="ind-nm">研发费用率</div><div class="ind-fibo">PRE-PROF-08</div></td>
+          <td><div class="ind-desc">研发费用占收入比例,反映技术投入强度</div></td>
+          <td><div class="cv-tags"><span class="sf">总账余额表</span></div></td>
+          <td><button class="det-btn" onclick="event.stopPropagation();openDrawer('PRE-PROF-08')">查看详情</button></td>
+        </tr>
+        <tr class="clickable" onclick="openDrawer('PRE-PROF-09')">
+          <td><div class="ind-nm">三费率</div><div class="ind-fibo">PRE-PROF-09</div></td>
+          <td><div class="ind-desc">销售+管理+财务三大期间费用占收入比例</div></td>
+          <td><div class="cv-tags"><span class="sf">总账余额表</span></div></td>
+          <td><button class="det-btn" onclick="event.stopPropagation();openDrawer('PRE-PROF-09')">查看详情</button></td>
+        </tr></tbody>
+        </table>
+      </div>
+      <div class="ind-sec" id="sec-pre-客户结构">
+        <div class="is-hd">
+          <div class="is-ico" style="background:var(--blue-lt);color:var(--blue)">👥</div>
+          <span class="is-title">客户结构</span>
+          <span class="is-count">6 项指标</span>
+        </div>
+        <table class="it">
+          <thead><tr>
+            <th style="width:22%">指标名称 / 编号</th>
+            <th style="width:36%">业务口径</th>
+            <th style="width:32%">数据来源</th>
+            <th style="width:10%">详情</th>
+          </tr></thead>
+          <tbody>
+        <tr class="clickable" onclick="openDrawer('PRE-CUST-01')">
+          <td><div class="ind-nm">活跃客户数</div><div class="ind-fibo">PRE-CUST-01</div></td>
+          <td><div class="ind-desc">近12个月有应收业务往来的活跃客户数</div></td>
+          <td><div class="cv-tags"><span class="sf">应收单明细表</span></div></td>
+          <td><button class="det-btn" onclick="event.stopPropagation();openDrawer('PRE-CUST-01')">查看详情</button></td>
+        </tr>
+        <tr class="clickable" onclick="openDrawer('PRE-CUST-02')">
+          <td><div class="ind-nm">累计客户数</div><div class="ind-fibo">PRE-CUST-02</div></td>
+          <td><div class="ind-desc">档案库中启用状态的客户总数</div></td>
+          <td><div class="cv-tags"><span class="sf">客户基础档案</span></div></td>
+          <td><button class="det-btn" onclick="event.stopPropagation();openDrawer('PRE-CUST-02')">查看详情</button></td>
+        </tr>
+        <tr class="clickable" onclick="openDrawer('PRE-CUST-03')">
+          <td><div class="ind-nm">期间销售总额</div><div class="ind-fibo">PRE-CUST-03</div></td>
+          <td><div class="ind-desc">报告期内销售发票金额合计</div></td>
+          <td><div class="cv-tags"><span class="sf">销售发票主表</span></div></td>
+          <td><button class="det-btn" onclick="event.stopPropagation();openDrawer('PRE-CUST-03')">查看详情</button></td>
+        </tr>
+        <tr class="clickable" onclick="openDrawer('PRE-CUST-04')">
+          <td><div class="ind-nm">期间销售笔数</div><div class="ind-fibo">PRE-CUST-04</div></td>
+          <td><div class="ind-desc">报告期内开具的销售发票总笔数</div></td>
+          <td><div class="cv-tags"><span class="sf">销售发票主表</span></div></td>
+          <td><button class="det-btn" onclick="event.stopPropagation();openDrawer('PRE-CUST-04')">查看详情</button></td>
+        </tr>
+        <tr class="clickable" onclick="openDrawer('PRE-CUST-05')">
+          <td><div class="ind-nm">销售平均单笔金额</div><div class="ind-fibo">PRE-CUST-05</div></td>
+          <td><div class="ind-desc">平均每笔销售发票的金额</div></td>
+          <td><div class="cv-tags"><span class="sf">销售发票主表</span></div></td>
+          <td><button class="det-btn" onclick="event.stopPropagation();openDrawer('PRE-CUST-05')">查看详情</button></td>
+        </tr>
+        <tr class="clickable" onclick="openDrawer('PRE-CUST-08')">
+          <td><div class="ind-nm">客户应收总额</div><div class="ind-fibo">PRE-CUST-08</div></td>
+          <td><div class="ind-desc">应收账款余额总额(客户欠款合计)</div></td>
+          <td><div class="cv-tags"><span class="sf">往来余额表</span></div></td>
+          <td><button class="det-btn" onclick="event.stopPropagation();openDrawer('PRE-CUST-08')">查看详情</button></td>
+        </tr></tbody>
+        </table>
+      </div>
+      <div class="ind-sec" id="sec-pre-供应商结构">
+        <div class="is-hd">
+          <div class="is-ico" style="background:var(--blue-lt);color:var(--blue)">🏭</div>
+          <span class="is-title">供应商结构</span>
+          <span class="is-count">6 项指标</span>
+        </div>
+        <table class="it">
+          <thead><tr>
+            <th style="width:22%">指标名称 / 编号</th>
+            <th style="width:36%">业务口径</th>
+            <th style="width:32%">数据来源</th>
+            <th style="width:10%">详情</th>
+          </tr></thead>
+          <tbody>
+        <tr class="clickable" onclick="openDrawer('PRE-SUP-01')">
+          <td><div class="ind-nm">活跃供应商数</div><div class="ind-fibo">PRE-SUP-01</div></td>
+          <td><div class="ind-desc">近12个月有应付业务往来的活跃供应商数</div></td>
+          <td><div class="cv-tags"><span class="sf">应付单明细表</span></div></td>
+          <td><button class="det-btn" onclick="event.stopPropagation();openDrawer('PRE-SUP-01')">查看详情</button></td>
+        </tr>
+        <tr class="clickable" onclick="openDrawer('PRE-SUP-02')">
+          <td><div class="ind-nm">累计供应商数</div><div class="ind-fibo">PRE-SUP-02</div></td>
+          <td><div class="ind-desc">档案库中启用状态的供应商总数</div></td>
+          <td><div class="cv-tags"><span class="sf">供应商基础档案</span></div></td>
+          <td><button class="det-btn" onclick="event.stopPropagation();openDrawer('PRE-SUP-02')">查看详情</button></td>
+        </tr>
+        <tr class="clickable" onclick="openDrawer('PRE-SUP-03')">
+          <td><div class="ind-nm">供应商黑名单数</div><div class="ind-fibo">PRE-SUP-03</div></td>
+          <td><div class="ind-desc">进入黑名单的供应商数量</div></td>
+          <td><div class="cv-tags"><span class="sf">供应商基础档案</span></div></td>
+          <td><button class="det-btn" onclick="event.stopPropagation();openDrawer('PRE-SUP-03')">查看详情</button></td>
+        </tr>
+        <tr class="clickable" onclick="openDrawer('PRE-SUP-04')">
+          <td><div class="ind-nm">期间采购总额</div><div class="ind-fibo">PRE-SUP-04</div></td>
+          <td><div class="ind-desc">报告期内采购发票金额合计</div></td>
+          <td><div class="cv-tags"><span class="sf">采购发票表</span></div></td>
+          <td><button class="det-btn" onclick="event.stopPropagation();openDrawer('PRE-SUP-04')">查看详情</button></td>
+        </tr>
+        <tr class="clickable" onclick="openDrawer('PRE-SUP-05')">
+          <td><div class="ind-nm">期间采购笔数</div><div class="ind-fibo">PRE-SUP-05</div></td>
+          <td><div class="ind-desc">报告期内收到的采购发票总笔数</div></td>
+          <td><div class="cv-tags"><span class="sf">采购发票表</span></div></td>
+          <td><button class="det-btn" onclick="event.stopPropagation();openDrawer('PRE-SUP-05')">查看详情</button></td>
+        </tr>
+        <tr class="clickable" onclick="openDrawer('PRE-SUP-06')">
+          <td><div class="ind-nm">采购平均单笔金额</div><div class="ind-fibo">PRE-SUP-06</div></td>
+          <td><div class="ind-desc">平均每笔采购发票的金额</div></td>
+          <td><div class="cv-tags"><span class="sf">采购发票表</span></div></td>
+          <td><button class="det-btn" onclick="event.stopPropagation();openDrawer('PRE-SUP-06')">查看详情</button></td>
+        </tr></tbody>
+        </table>
+      </div>
+      <div class="ind-sec" id="sec-pre-合同">
+        <div class="is-hd">
+          <div class="is-ico" style="background:var(--purple-lt);color:var(--purple)">📜</div>
+          <span class="is-title">合同</span>
+          <span class="is-count">6 项指标</span>
+        </div>
+        <table class="it">
+          <thead><tr>
+            <th style="width:22%">指标名称 / 编号</th>
+            <th style="width:36%">业务口径</th>
+            <th style="width:32%">数据来源</th>
+            <th style="width:10%">详情</th>
+          </tr></thead>
+          <tbody>
+        <tr class="clickable" onclick="openDrawer('PRE-CT-01')">
+          <td><div class="ind-nm">在手销售合同数</div><div class="ind-fibo">PRE-CT-01</div></td>
+          <td><div class="ind-desc">执行中的销售合同总数</div></td>
+          <td><div class="cv-tags"><span class="sf">销售合同主表</span></div></td>
+          <td><button class="det-btn" onclick="event.stopPropagation();openDrawer('PRE-CT-01')">查看详情</button></td>
+        </tr>
+        <tr class="clickable" onclick="openDrawer('PRE-CT-02')">
+          <td><div class="ind-nm">在手销售合同金额</div><div class="ind-fibo">PRE-CT-02</div></td>
+          <td><div class="ind-desc">执行中的销售合同金额合计(在手订单)</div></td>
+          <td><div class="cv-tags"><span class="sf">销售合同主表</span></div></td>
+          <td><button class="det-btn" onclick="event.stopPropagation();openDrawer('PRE-CT-02')">查看详情</button></td>
+        </tr>
+        <tr class="clickable" onclick="openDrawer('PRE-CT-03')">
+          <td><div class="ind-nm">在手采购合同数</div><div class="ind-fibo">PRE-CT-03</div></td>
+          <td><div class="ind-desc">执行中的采购合同总数</div></td>
+          <td><div class="cv-tags"><span class="sf">采购合同主表</span></div></td>
+          <td><button class="det-btn" onclick="event.stopPropagation();openDrawer('PRE-CT-03')">查看详情</button></td>
+        </tr>
+        <tr class="clickable" onclick="openDrawer('PRE-CT-04')">
+          <td><div class="ind-nm">在手采购合同金额</div><div class="ind-fibo">PRE-CT-04</div></td>
+          <td><div class="ind-desc">执行中的采购合同金额合计</div></td>
+          <td><div class="cv-tags"><span class="sf">采购合同主表</span></div></td>
+          <td><button class="det-btn" onclick="event.stopPropagation();openDrawer('PRE-CT-04')">查看详情</button></td>
+        </tr>
+        <tr class="clickable" onclick="openDrawer('PRE-CT-05')">
+          <td><div class="ind-nm">销售合同平均金额</div><div class="ind-fibo">PRE-CT-05</div></td>
+          <td><div class="ind-desc">平均每份销售合同的金额</div></td>
+          <td><div class="cv-tags"><span class="sf">销售合同主表</span></div></td>
+          <td><button class="det-btn" onclick="event.stopPropagation();openDrawer('PRE-CT-05')">查看详情</button></td>
+        </tr>
+        <tr class="clickable" onclick="openDrawer('PRE-CT-06')">
+          <td><div class="ind-nm">采购合同平均金额</div><div class="ind-fibo">PRE-CT-06</div></td>
+          <td><div class="ind-desc">平均每份采购合同的金额</div></td>
+          <td><div class="cv-tags"><span class="sf">采购合同主表</span></div></td>
+          <td><button class="det-btn" onclick="event.stopPropagation();openDrawer('PRE-CT-06')">查看详情</button></td>
+        </tr></tbody>
+        </table>
+      </div>
+      <div class="ind-sec" id="sec-pre-融资历史">
+        <div class="is-hd">
+          <div class="is-ico" style="background:var(--amber-lt);color:var(--amber)">🏦</div>
+          <span class="is-title">融资历史</span>
+          <span class="is-count">5 项指标</span>
+        </div>
+        <table class="it">
+          <thead><tr>
+            <th style="width:22%">指标名称 / 编号</th>
+            <th style="width:36%">业务口径</th>
+            <th style="width:32%">数据来源</th>
+            <th style="width:10%">详情</th>
+          </tr></thead>
+          <tbody>
+        <tr class="clickable" onclick="openDrawer('PRE-LOAN-01')">
+          <td><div class="ind-nm">历史融资次数</div><div class="ind-fibo">PRE-LOAN-01</div></td>
+          <td><div class="ind-desc">企业历史上签订过的融资合同总数</div></td>
+          <td><div class="cv-tags"><span class="sf">融资合同主表</span></div></td>
+          <td><button class="det-btn" onclick="event.stopPropagation();openDrawer('PRE-LOAN-01')">查看详情</button></td>
+        </tr>
+        <tr class="clickable" onclick="openDrawer('PRE-LOAN-02')">
+          <td><div class="ind-nm">当前融资余额</div><div class="ind-fibo">PRE-LOAN-02</div></td>
+          <td><div class="ind-desc">当前仍在偿还中的融资余额</div></td>
+          <td><div class="cv-tags"><span class="sf">融资合同主表</span></div></td>
+          <td><button class="det-btn" onclick="event.stopPropagation();openDrawer('PRE-LOAN-02')">查看详情</button></td>
+        </tr>
+        <tr class="clickable" onclick="openDrawer('PRE-LOAN-03')">
+          <td><div class="ind-nm">最大单笔融资金额</div><div class="ind-fibo">PRE-LOAN-03</div></td>
+          <td><div class="ind-desc">历史上单笔最大的融资金额</div></td>
+          <td><div class="cv-tags"><span class="sf">融资合同主表</span></div></td>
+          <td><button class="det-btn" onclick="event.stopPropagation();openDrawer('PRE-LOAN-03')">查看详情</button></td>
+        </tr>
+        <tr class="clickable" onclick="openDrawer('PRE-LOAN-04')">
+          <td><div class="ind-nm">债券融资总额</div><div class="ind-fibo">PRE-LOAN-04</div></td>
+          <td><div class="ind-desc">发行债券累计融资金额</div></td>
+          <td><div class="cv-tags"><span class="sf">债券合同表</span></div></td>
+          <td><button class="det-btn" onclick="event.stopPropagation();openDrawer('PRE-LOAN-04')">查看详情</button></td>
+        </tr>
+        <tr class="clickable" onclick="openDrawer('PRE-LOAN-05')">
+          <td><div class="ind-nm">融资台账余额</div><div class="ind-fibo">PRE-LOAN-05</div></td>
+          <td><div class="ind-desc">融资台账中的融资余额</div></td>
+          <td><div class="cv-tags"><span class="sf">融资台账表</span></div></td>
+          <td><button class="det-btn" onclick="event.stopPropagation();openDrawer('PRE-LOAN-05')">查看详情</button></td>
+        </tr></tbody>
+        </table>
+      </div>
+      <div class="ind-sec" id="sec-pre-担保质押">
+        <div class="is-hd">
+          <div class="is-ico" style="background:var(--purple-lt);color:var(--purple)">🔐</div>
+          <span class="is-title">担保质押</span>
+          <span class="is-count">7 项指标</span>
+        </div>
+        <table class="it">
+          <thead><tr>
+            <th style="width:22%">指标名称 / 编号</th>
+            <th style="width:36%">业务口径</th>
+            <th style="width:32%">数据来源</th>
+            <th style="width:10%">详情</th>
+          </tr></thead>
+          <tbody>
+        <tr class="clickable" onclick="openDrawer('PRE-GUA-01')">
+          <td><div class="ind-nm">对外担保合同数</div><div class="ind-fibo">PRE-GUA-01</div></td>
+          <td><div class="ind-desc">企业对外签订的担保合同总数</div></td>
+          <td><div class="cv-tags"><span class="sf">担保合同主表</span></div></td>
+          <td><button class="det-btn" onclick="event.stopPropagation();openDrawer('PRE-GUA-01')">查看详情</button></td>
+        </tr>
+        <tr class="clickable" onclick="openDrawer('PRE-GUA-02')">
+          <td><div class="ind-nm">对外担保总额</div><div class="ind-fibo">PRE-GUA-02</div></td>
+          <td><div class="ind-desc">对外担保合同金额合计</div></td>
+          <td><div class="cv-tags"><span class="sf">担保合同主表</span></div></td>
+          <td><button class="det-btn" onclick="event.stopPropagation();openDrawer('PRE-GUA-02')">查看详情</button></td>
+        </tr>
+        <tr class="clickable" onclick="openDrawer('PRE-GUA-03')">
+          <td><div class="ind-nm">担保债务总额</div><div class="ind-fibo">PRE-GUA-03</div></td>
+          <td><div class="ind-desc">担保所涉及的被担保债务金额</div></td>
+          <td><div class="cv-tags"><span class="sf">担保合同主表</span></div></td>
+          <td><button class="det-btn" onclick="event.stopPropagation();openDrawer('PRE-GUA-03')">查看详情</button></td>
+        </tr>
+        <tr class="clickable" onclick="openDrawer('PRE-GUA-04')">
+          <td><div class="ind-nm">未使用担保额度</div><div class="ind-fibo">PRE-GUA-04</div></td>
+          <td><div class="ind-desc">剩余可用的担保额度</div></td>
+          <td><div class="cv-tags"><span class="sf">担保合同主表</span></div></td>
+          <td><button class="det-btn" onclick="event.stopPropagation();openDrawer('PRE-GUA-04')">查看详情</button></td>
+        </tr>
+        <tr class="clickable" onclick="openDrawer('PRE-GUA-05')">
+          <td><div class="ind-nm">担保额度使用率</div><div class="ind-fibo">PRE-GUA-05</div></td>
+          <td><div class="ind-desc">担保额度使用率(已用 / 总额度)</div></td>
+          <td><div class="cv-tags"><span class="sf">担保合同主表</span></div></td>
+          <td><button class="det-btn" onclick="event.stopPropagation();openDrawer('PRE-GUA-05')">查看详情</button></td>
+        </tr>
+        <tr class="clickable" onclick="openDrawer('PRE-GUA-06')">
+          <td><div class="ind-nm">质押物总数</div><div class="ind-fibo">PRE-GUA-06</div></td>
+          <td><div class="ind-desc">质押给他人的资产总数</div></td>
+          <td><div class="cv-tags"><span class="sf">质押信息表</span></div></td>
+          <td><button class="det-btn" onclick="event.stopPropagation();openDrawer('PRE-GUA-06')">查看详情</button></td>
+        </tr>
+        <tr class="clickable" onclick="openDrawer('PRE-GUA-07')">
+          <td><div class="ind-nm">质押物总价值</div><div class="ind-fibo">PRE-GUA-07</div></td>
+          <td><div class="ind-desc">所有质押资产的评估总值</div></td>
+          <td><div class="cv-tags"><span class="sf">质押信息表</span></div></td>
+          <td><button class="det-btn" onclick="event.stopPropagation();openDrawer('PRE-GUA-07')">查看详情</button></td>
+        </tr></tbody>
+        </table>
+      </div>
+      <div class="ind-sec" id="sec-pre-资产规模">
+        <div class="is-hd">
+          <div class="is-ico" style="background:var(--teal-lt);color:var(--teal)">📊</div>
+          <span class="is-title">资产规模</span>
+          <span class="is-count">4 项指标</span>
+        </div>
+        <table class="it">
+          <thead><tr>
+            <th style="width:22%">指标名称 / 编号</th>
+            <th style="width:36%">业务口径</th>
+            <th style="width:32%">数据来源</th>
+            <th style="width:10%">详情</th>
+          </tr></thead>
+          <tbody>
+        <tr class="clickable" onclick="openDrawer('PRE-SCALE-01')">
+          <td><div class="ind-nm">总资产规模</div><div class="ind-fibo">PRE-SCALE-01</div></td>
+          <td><div class="ind-desc">企业总资产规模</div></td>
+          <td><div class="cv-tags"><span class="sf">总账余额表</span></div></td>
+          <td><button class="det-btn" onclick="event.stopPropagation();openDrawer('PRE-SCALE-01')">查看详情</button></td>
+        </tr>
+        <tr class="clickable" onclick="openDrawer('PRE-SCALE-02')">
+          <td><div class="ind-nm">所有者权益规模</div><div class="ind-fibo">PRE-SCALE-02</div></td>
+          <td><div class="ind-desc">所有者权益总额</div></td>
+          <td><div class="cv-tags"><span class="sf">总账余额表</span></div></td>
+          <td><button class="det-btn" onclick="event.stopPropagation();openDrawer('PRE-SCALE-02')">查看详情</button></td>
+        </tr>
+        <tr class="clickable" onclick="openDrawer('PRE-SCALE-03')">
+          <td><div class="ind-nm">注册资本</div><div class="ind-fibo">PRE-SCALE-03</div></td>
+          <td><div class="ind-desc">实收资本(注册资本)</div></td>
+          <td><div class="cv-tags"><span class="sf">总账余额表</span></div></td>
+          <td><button class="det-btn" onclick="event.stopPropagation();openDrawer('PRE-SCALE-03')">查看详情</button></td>
+        </tr>
+        <tr class="clickable" onclick="openDrawer('PRE-SCALE-04')">
+          <td><div class="ind-nm">期末存货规模</div><div class="ind-fibo">PRE-SCALE-04</div></td>
+          <td><div class="ind-desc">期末存货账面余额</div></td>
+          <td><div class="cv-tags"><span class="sf">存货月末余额表</span></div></td>
+          <td><button class="det-btn" onclick="event.stopPropagation();openDrawer('PRE-SCALE-04')">查看详情</button></td>
+        </tr></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="page" id="p-post">
+  <div class="ph fu">
+    <div class="pt">贷后指标体系</div>
+    <div class="ps">贷款发放后对企业还款表现、坏账风险、担保变化的持续监控 · 共 <strong>6</strong> 项简单指标(难度 1)· 点击任意指标查看公式/SQL/数据来源</div>
+  </div>
+
+  <div class="scn-intro fu fu1">
+    <div class="scn-intro-item">
+      <div class="scn-intro-ico">📊</div>
+      <div>
+        <div class="scn-intro-lbl">指标总数</div>
+        <div class="scn-intro-val">6 项</div>
+      </div>
+    </div>
+    <div class="scn-intro-item">
+      <div class="scn-intro-ico">🗂️</div>
+      <div>
+        <div class="scn-intro-lbl">业务主题</div>
+        <div class="scn-intro-val">3 个</div>
+      </div>
+    </div>
+    <div class="scn-intro-item">
+      <div class="scn-intro-ico">⚡</div>
+      <div>
+        <div class="scn-intro-lbl">复杂度</div>
+        <div class="scn-intro-val">单表聚合</div>
+      </div>
+    </div>
+    <div class="scn-intro-item">
+      <div class="scn-intro-ico">✓</div>
+      <div>
+        <div class="scn-intro-lbl">数据字段</div>
+        <div class="scn-intro-val">100% 对齐 NCC</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="ind-layout fu fu2">
+    <div class="dim-nav">
+      <div class="dn-title">业务主题导航</div>
+      <div class="dn-item on" onclick="scrollTo2('sec-post-应收应付');selDn(this)">
+          <div class="dn-dot" style="background:var(--red)"></div>
+          应收应付<div class="dn-cnt">2</div>
+        </div><div class="dn-item" onclick="scrollTo2('sec-post-还款表现');selDn(this)">
+          <div class="dn-dot" style="background:var(--amber)"></div>
+          还款表现<div class="dn-cnt">3</div>
+        </div><div class="dn-item" onclick="scrollTo2('sec-post-担保变化');selDn(this)">
+          <div class="dn-dot" style="background:var(--blue)"></div>
+          担保变化<div class="dn-cnt">1</div>
+        </div>
+      <div style="margin-top:14px;padding-top:12px;border-top:1px solid var(--mist)">
+        <div style="font-size:9px;color:var(--ink-soft);margin-bottom:5px">数据说明</div>
+        <div style="font-size:10px;color:var(--ink-soft);line-height:1.7">
+          所有指标字段均已对照<br>用友 NCC 真实 DDL 校验<br>SQL 可直接执行
+        </div>
+      </div>
+    </div>
+
+    <div class="ind-sections">
+      
+      <div class="ind-sec" id="sec-post-应收应付">
+        <div class="is-hd">
+          <div class="is-ico" style="background:var(--red-lt);color:var(--red)">📉</div>
+          <span class="is-title">应收应付</span>
+          <span class="is-count">2 项指标</span>
+        </div>
+        <table class="it">
+          <thead><tr>
+            <th style="width:22%">指标名称 / 编号</th>
+            <th style="width:36%">业务口径</th>
+            <th style="width:32%">数据来源</th>
+            <th style="width:10%">详情</th>
+          </tr></thead>
+          <tbody>
+        <tr class="clickable" onclick="openDrawer('POST-AR-03')">
+          <td><div class="ind-nm">坏账发生额</div><div class="ind-fibo">POST-AR-03</div></td>
+          <td><div class="ind-desc">报告期内发生的坏账损失金额</div></td>
+          <td><div class="cv-tags"><span class="sf">坏账损失主表</span></div></td>
+          <td><button class="det-btn" onclick="event.stopPropagation();openDrawer('POST-AR-03')">查看详情</button></td>
+        </tr>
+        <tr class="clickable" onclick="openDrawer('POST-AR-04')">
+          <td><div class="ind-nm">坏账发生笔数</div><div class="ind-fibo">POST-AR-04</div></td>
+          <td><div class="ind-desc">报告期内发生的坏账单据数量</div></td>
+          <td><div class="cv-tags"><span class="sf">坏账损失主表</span></div></td>
+          <td><button class="det-btn" onclick="event.stopPropagation();openDrawer('POST-AR-04')">查看详情</button></td>
+        </tr></tbody>
+        </table>
+      </div>
+      <div class="ind-sec" id="sec-post-还款表现">
+        <div class="is-hd">
+          <div class="is-ico" style="background:var(--amber-lt);color:var(--amber)">💳</div>
+          <span class="is-title">还款表现</span>
+          <span class="is-count">3 项指标</span>
+        </div>
+        <table class="it">
+          <thead><tr>
+            <th style="width:22%">指标名称 / 编号</th>
+            <th style="width:36%">业务口径</th>
+            <th style="width:32%">数据来源</th>
+            <th style="width:10%">详情</th>
+          </tr></thead>
+          <tbody>
+        <tr class="clickable" onclick="openDrawer('POST-REP-01')">
+          <td><div class="ind-nm">本期计划还本金额</div><div class="ind-fibo">POST-REP-01</div></td>
+          <td><div class="ind-desc">本期计划归还的贷款本金金额</div></td>
+          <td><div class="cv-tags"><span class="sf">还本计划表</span></div></td>
+          <td><button class="det-btn" onclick="event.stopPropagation();openDrawer('POST-REP-01')">查看详情</button></td>
+        </tr>
+        <tr class="clickable" onclick="openDrawer('POST-REP-02')">
+          <td><div class="ind-nm">本期实际还本金额</div><div class="ind-fibo">POST-REP-02</div></td>
+          <td><div class="ind-desc">本期实际归还的贷款本金金额</div></td>
+          <td><div class="cv-tags"><span class="sf">还本计划表</span></div></td>
+          <td><button class="det-btn" onclick="event.stopPropagation();openDrawer('POST-REP-02')">查看详情</button></td>
+        </tr>
+        <tr class="clickable" onclick="openDrawer('POST-REP-03')">
+          <td><div class="ind-nm">本期计划还息金额</div><div class="ind-fibo">POST-REP-03</div></td>
+          <td><div class="ind-desc">本期计划支付的贷款利息金额</div></td>
+          <td><div class="cv-tags"><span class="sf">还息计划表</span></div></td>
+          <td><button class="det-btn" onclick="event.stopPropagation();openDrawer('POST-REP-03')">查看详情</button></td>
+        </tr></tbody>
+        </table>
+      </div>
+      <div class="ind-sec" id="sec-post-担保变化">
+        <div class="is-hd">
+          <div class="is-ico" style="background:var(--blue-lt);color:var(--blue)">🔄</div>
+          <span class="is-title">担保变化</span>
+          <span class="is-count">1 项指标</span>
+        </div>
+        <table class="it">
+          <thead><tr>
+            <th style="width:22%">指标名称 / 编号</th>
+            <th style="width:36%">业务口径</th>
+            <th style="width:32%">数据来源</th>
+            <th style="width:10%">详情</th>
+          </tr></thead>
+          <tbody>
+        <tr class="clickable" onclick="openDrawer('POST-GUA-01')">
+          <td><div class="ind-nm">新增担保合同数</div><div class="ind-fibo">POST-GUA-01</div></td>
+          <td><div class="ind-desc">本期新增签订的担保合同数量</div></td>
+          <td><div class="cv-tags"><span class="sf">担保合同主表</span></div></td>
+          <td><button class="det-btn" onclick="event.stopPropagation();openDrawer('POST-GUA-01')">查看详情</button></td>
+        </tr></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="page" id="p-scf">
+  <div class="ph fu">
+    <div class="pt">供应链指标体系</div>
+    <div class="ps">以核心企业为中心,评估其上下游交易规模、合作稳定性及应收应付融资能力 · 共 <strong>20</strong> 项简单指标(难度 1)· 点击任意指标查看公式/SQL/数据来源</div>
+  </div>
+
+  <div class="scn-intro fu fu1">
+    <div class="scn-intro-item">
+      <div class="scn-intro-ico">📊</div>
+      <div>
+        <div class="scn-intro-lbl">指标总数</div>
+        <div class="scn-intro-val">20 项</div>
+      </div>
+    </div>
+    <div class="scn-intro-item">
+      <div class="scn-intro-ico">🗂️</div>
+      <div>
+        <div class="scn-intro-lbl">业务主题</div>
+        <div class="scn-intro-val">7 个</div>
+      </div>
+    </div>
+    <div class="scn-intro-item">
+      <div class="scn-intro-ico">⚡</div>
+      <div>
+        <div class="scn-intro-lbl">复杂度</div>
+        <div class="scn-intro-val">单表聚合</div>
+      </div>
+    </div>
+    <div class="scn-intro-item">
+      <div class="scn-intro-ico">✓</div>
+      <div>
+        <div class="scn-intro-lbl">数据字段</div>
+        <div class="scn-intro-val">100% 对齐 NCC</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="ind-layout fu fu2">
+    <div class="dim-nav">
+      <div class="dn-title">业务主题导航</div>
+      <div class="dn-item on" onclick="scrollTo2('sec-scf-交易规模');selDn(this)">
+          <div class="dn-dot" style="background:var(--scf)"></div>
+          交易规模<div class="dn-cnt">5</div>
+        </div><div class="dn-item" onclick="scrollTo2('sec-scf-上游供应商');selDn(this)">
+          <div class="dn-dot" style="background:var(--scf)"></div>
+          上游供应商<div class="dn-cnt">4</div>
+        </div><div class="dn-item" onclick="scrollTo2('sec-scf-下游客户');selDn(this)">
+          <div class="dn-dot" style="background:var(--scf)"></div>
+          下游客户<div class="dn-cnt">4</div>
+        </div><div class="dn-item" onclick="scrollTo2('sec-scf-订单');selDn(this)">
+          <div class="dn-dot" style="background:var(--scf)"></div>
+          订单<div class="dn-cnt">2</div>
+        </div><div class="dn-item" onclick="scrollTo2('sec-scf-合同');selDn(this)">
+          <div class="dn-dot" style="background:var(--purple)"></div>
+          合同<div class="dn-cnt">1</div>
+        </div><div class="dn-item" onclick="scrollTo2('sec-scf-融资行为');selDn(this)">
+          <div class="dn-dot" style="background:var(--scf)"></div>
+          融资行为<div class="dn-cnt">2</div>
+        </div><div class="dn-item" onclick="scrollTo2('sec-scf-存货融资');selDn(this)">
+          <div class="dn-dot" style="background:var(--scf)"></div>
+          存货融资<div class="dn-cnt">2</div>
+        </div>
+      <div style="margin-top:14px;padding-top:12px;border-top:1px solid var(--mist)">
+        <div style="font-size:9px;color:var(--ink-soft);margin-bottom:5px">数据说明</div>
+        <div style="font-size:10px;color:var(--ink-soft);line-height:1.7">
+          所有指标字段均已对照<br>用友 NCC 真实 DDL 校验<br>SQL 可直接执行
+        </div>
+      </div>
+    </div>
+
+    <div class="ind-sections">
+      
+      <div class="ind-sec" id="sec-scf-交易规模">
+        <div class="is-hd">
+          <div class="is-ico" style="background:var(--scf-lt);color:var(--scf)">📈</div>
+          <span class="is-title">交易规模</span>
+          <span class="is-count">5 项指标</span>
+        </div>
+        <table class="it">
+          <thead><tr>
+            <th style="width:22%">指标名称 / 编号</th>
+            <th style="width:36%">业务口径</th>
+            <th style="width:32%">数据来源</th>
+            <th style="width:10%">详情</th>
+          </tr></thead>
+          <tbody>
+        <tr class="clickable" onclick="openDrawer('SCF-SCALE-01')">
+          <td><div class="ind-nm">月均销售额</div><div class="ind-fibo">SCF-SCALE-01</div></td>
+          <td><div class="ind-desc">近12个月月均销售额</div></td>
+          <td><div class="cv-tags"><span class="sf">销售发票主表</span></div></td>
+          <td><button class="det-btn" onclick="event.stopPropagation();openDrawer('SCF-SCALE-01')">查看详情</button></td>
+        </tr>
+        <tr class="clickable" onclick="openDrawer('SCF-SCALE-02')">
+          <td><div class="ind-nm">月均采购额</div><div class="ind-fibo">SCF-SCALE-02</div></td>
+          <td><div class="ind-desc">近12个月月均采购额</div></td>
+          <td><div class="cv-tags"><span class="sf">采购发票表</span></div></td>
+          <td><button class="det-btn" onclick="event.stopPropagation();openDrawer('SCF-SCALE-02')">查看详情</button></td>
+        </tr>
+        <tr class="clickable" onclick="openDrawer('SCF-SCALE-03')">
+          <td><div class="ind-nm">月均销售发票数</div><div class="ind-fibo">SCF-SCALE-03</div></td>
+          <td><div class="ind-desc">近12个月月均销售发票数</div></td>
+          <td><div class="cv-tags"><span class="sf">销售发票主表</span></div></td>
+          <td><button class="det-btn" onclick="event.stopPropagation();openDrawer('SCF-SCALE-03')">查看详情</button></td>
+        </tr>
+        <tr class="clickable" onclick="openDrawer('SCF-SCALE-04')">
+          <td><div class="ind-nm">月均采购发票数</div><div class="ind-fibo">SCF-SCALE-04</div></td>
+          <td><div class="ind-desc">近12个月月均采购发票数</div></td>
+          <td><div class="cv-tags"><span class="sf">采购发票表</span></div></td>
+          <td><button class="det-btn" onclick="event.stopPropagation();openDrawer('SCF-SCALE-04')">查看详情</button></td>
+        </tr>
+        <tr class="clickable" onclick="openDrawer('SCF-SCALE-05')">
+          <td><div class="ind-nm">月均订单金额</div><div class="ind-fibo">SCF-SCALE-05</div></td>
+          <td><div class="ind-desc">近12个月月均采购订单金额</div></td>
+          <td><div class="cv-tags"><span class="sf">采购订单主表</span></div></td>
+          <td><button class="det-btn" onclick="event.stopPropagation();openDrawer('SCF-SCALE-05')">查看详情</button></td>
+        </tr></tbody>
+        </table>
+      </div>
+      <div class="ind-sec" id="sec-scf-上游供应商">
+        <div class="is-hd">
+          <div class="is-ico" style="background:var(--scf-lt);color:var(--scf)">⬆</div>
+          <span class="is-title">上游供应商</span>
+          <span class="is-count">4 项指标</span>
+        </div>
+        <table class="it">
+          <thead><tr>
+            <th style="width:22%">指标名称 / 编号</th>
+            <th style="width:36%">业务口径</th>
+            <th style="width:32%">数据来源</th>
+            <th style="width:10%">详情</th>
+          </tr></thead>
+          <tbody>
+        <tr class="clickable" onclick="openDrawer('SCF-UP-01')">
+          <td><div class="ind-nm">应付账款总额</div><div class="ind-fibo">SCF-UP-01</div></td>
+          <td><div class="ind-desc">当前应付账款余额合计</div></td>
+          <td><div class="cv-tags"><span class="sf">往来余额表</span></div></td>
+          <td><button class="det-btn" onclick="event.stopPropagation();openDrawer('SCF-UP-01')">查看详情</button></td>
+        </tr>
+        <tr class="clickable" onclick="openDrawer('SCF-UP-02')">
+          <td><div class="ind-nm">应付笔数</div><div class="ind-fibo">SCF-UP-02</div></td>
+          <td><div class="ind-desc">报告期内应付单据笔数</div></td>
+          <td><div class="cv-tags"><span class="sf">应付单主表</span></div></td>
+          <td><button class="det-btn" onclick="event.stopPropagation();openDrawer('SCF-UP-02')">查看详情</button></td>
+        </tr>
+        <tr class="clickable" onclick="openDrawer('SCF-UP-03')">
+          <td><div class="ind-nm">应付平均单笔金额</div><div class="ind-fibo">SCF-UP-03</div></td>
+          <td><div class="ind-desc">平均每笔应付单金额</div></td>
+          <td><div class="cv-tags"><span class="sf">应付单主表</span></div></td>
+          <td><button class="det-btn" onclick="event.stopPropagation();openDrawer('SCF-UP-03')">查看详情</button></td>
+        </tr>
+        <tr class="clickable" onclick="openDrawer('SCF-UP-05')">
+          <td><div class="ind-nm">长期供应商数</div><div class="ind-fibo">SCF-UP-05</div></td>
+          <td><div class="ind-desc">合作超过1年的长期供应商数</div></td>
+          <td><div class="cv-tags"><span class="sf">供应商基础档案</span></div></td>
+          <td><button class="det-btn" onclick="event.stopPropagation();openDrawer('SCF-UP-05')">查看详情</button></td>
+        </tr></tbody>
+        </table>
+      </div>
+      <div class="ind-sec" id="sec-scf-下游客户">
+        <div class="is-hd">
+          <div class="is-ico" style="background:var(--scf-lt);color:var(--scf)">⬇</div>
+          <span class="is-title">下游客户</span>
+          <span class="is-count">4 项指标</span>
+        </div>
+        <table class="it">
+          <thead><tr>
+            <th style="width:22%">指标名称 / 编号</th>
+            <th style="width:36%">业务口径</th>
+            <th style="width:32%">数据来源</th>
+            <th style="width:10%">详情</th>
+          </tr></thead>
+          <tbody>
+        <tr class="clickable" onclick="openDrawer('SCF-DOWN-01')">
+          <td><div class="ind-nm">应收账款总额</div><div class="ind-fibo">SCF-DOWN-01</div></td>
+          <td><div class="ind-desc">当前应收账款余额合计</div></td>
+          <td><div class="cv-tags"><span class="sf">往来余额表</span></div></td>
+          <td><button class="det-btn" onclick="event.stopPropagation();openDrawer('SCF-DOWN-01')">查看详情</button></td>
+        </tr>
+        <tr class="clickable" onclick="openDrawer('SCF-DOWN-02')">
+          <td><div class="ind-nm">应收笔数</div><div class="ind-fibo">SCF-DOWN-02</div></td>
+          <td><div class="ind-desc">报告期内应收单据笔数</div></td>
+          <td><div class="cv-tags"><span class="sf">应收单主表</span></div></td>
+          <td><button class="det-btn" onclick="event.stopPropagation();openDrawer('SCF-DOWN-02')">查看详情</button></td>
+        </tr>
+        <tr class="clickable" onclick="openDrawer('SCF-DOWN-03')">
+          <td><div class="ind-nm">应收平均单笔金额</div><div class="ind-fibo">SCF-DOWN-03</div></td>
+          <td><div class="ind-desc">平均每笔应收单金额</div></td>
+          <td><div class="cv-tags"><span class="sf">应收单主表</span></div></td>
+          <td><button class="det-btn" onclick="event.stopPropagation();openDrawer('SCF-DOWN-03')">查看详情</button></td>
+        </tr>
+        <tr class="clickable" onclick="openDrawer('SCF-DOWN-05')">
+          <td><div class="ind-nm">长期客户数</div><div class="ind-fibo">SCF-DOWN-05</div></td>
+          <td><div class="ind-desc">合作超过1年的长期客户数</div></td>
+          <td><div class="cv-tags"><span class="sf">客户基础档案</span></div></td>
+          <td><button class="det-btn" onclick="event.stopPropagation();openDrawer('SCF-DOWN-05')">查看详情</button></td>
+        </tr></tbody>
+        </table>
+      </div>
+      <div class="ind-sec" id="sec-scf-订单">
+        <div class="is-hd">
+          <div class="is-ico" style="background:var(--scf-lt);color:var(--scf)">📦</div>
+          <span class="is-title">订单</span>
+          <span class="is-count">2 项指标</span>
+        </div>
+        <table class="it">
+          <thead><tr>
+            <th style="width:22%">指标名称 / 编号</th>
+            <th style="width:36%">业务口径</th>
+            <th style="width:32%">数据来源</th>
+            <th style="width:10%">详情</th>
+          </tr></thead>
+          <tbody>
+        <tr class="clickable" onclick="openDrawer('SCF-ORDER-01')">
+          <td><div class="ind-nm">期间采购订单数</div><div class="ind-fibo">SCF-ORDER-01</div></td>
+          <td><div class="ind-desc">报告期内采购订单数量</div></td>
+          <td><div class="cv-tags"><span class="sf">采购订单主表</span></div></td>
+          <td><button class="det-btn" onclick="event.stopPropagation();openDrawer('SCF-ORDER-01')">查看详情</button></td>
+        </tr>
+        <tr class="clickable" onclick="openDrawer('SCF-ORDER-02')">
+          <td><div class="ind-nm">期间采购订单金额</div><div class="ind-fibo">SCF-ORDER-02</div></td>
+          <td><div class="ind-desc">报告期内采购订单金额合计</div></td>
+          <td><div class="cv-tags"><span class="sf">采购订单主表</span></div></td>
+          <td><button class="det-btn" onclick="event.stopPropagation();openDrawer('SCF-ORDER-02')">查看详情</button></td>
+        </tr></tbody>
+        </table>
+      </div>
+      <div class="ind-sec" id="sec-scf-合同">
+        <div class="is-hd">
+          <div class="is-ico" style="background:var(--purple-lt);color:var(--purple)">📜</div>
+          <span class="is-title">合同</span>
+          <span class="is-count">1 项指标</span>
+        </div>
+        <table class="it">
+          <thead><tr>
+            <th style="width:22%">指标名称 / 编号</th>
+            <th style="width:36%">业务口径</th>
+            <th style="width:32%">数据来源</th>
+            <th style="width:10%">详情</th>
+          </tr></thead>
+          <tbody>
+        <tr class="clickable" onclick="openDrawer('SCF-CT-02')">
+          <td><div class="ind-nm">在手销售合同总金额(可保理)</div><div class="ind-fibo">SCF-CT-02</div></td>
+          <td><div class="ind-desc">可用于保理业务的在手销售合同金额</div></td>
+          <td><div class="cv-tags"><span class="sf">销售合同主表</span></div></td>
+          <td><button class="det-btn" onclick="event.stopPropagation();openDrawer('SCF-CT-02')">查看详情</button></td>
+        </tr></tbody>
+        </table>
+      </div>
+      <div class="ind-sec" id="sec-scf-融资行为">
+        <div class="is-hd">
+          <div class="is-ico" style="background:var(--scf-lt);color:var(--scf)">💵</div>
+          <span class="is-title">融资行为</span>
+          <span class="is-count">2 项指标</span>
+        </div>
+        <table class="it">
+          <thead><tr>
+            <th style="width:22%">指标名称 / 编号</th>
+            <th style="width:36%">业务口径</th>
+            <th style="width:32%">数据来源</th>
+            <th style="width:10%">详情</th>
+          </tr></thead>
+          <tbody>
+        <tr class="clickable" onclick="openDrawer('SCF-LOAN-01')">
+          <td><div class="ind-nm">融资机构数</div><div class="ind-fibo">SCF-LOAN-01</div></td>
+          <td><div class="ind-desc">企业合作过的融资机构数量</div></td>
+          <td><div class="cv-tags"><span class="sf">融资合同主表</span></div></td>
+          <td><button class="det-btn" onclick="event.stopPropagation();openDrawer('SCF-LOAN-01')">查看详情</button></td>
+        </tr>
+        <tr class="clickable" onclick="openDrawer('SCF-LOAN-02')">
+          <td><div class="ind-nm">融资渠道数</div><div class="ind-fibo">SCF-LOAN-02</div></td>
+          <td><div class="ind-desc">企业使用的融资渠道总数</div></td>
+          <td><div class="cv-tags"><span class="sf">融资台账表</span><span class="sf">债券合同表</span><span class="sf">融资合同主表</span></div></td>
+          <td><button class="det-btn" onclick="event.stopPropagation();openDrawer('SCF-LOAN-02')">查看详情</button></td>
+        </tr></tbody>
+        </table>
+      </div>
+      <div class="ind-sec" id="sec-scf-存货融资">
+        <div class="is-hd">
+          <div class="is-ico" style="background:var(--scf-lt);color:var(--scf)">📦</div>
+          <span class="is-title">存货融资</span>
+          <span class="is-count">2 项指标</span>
+        </div>
+        <table class="it">
+          <thead><tr>
+            <th style="width:22%">指标名称 / 编号</th>
+            <th style="width:36%">业务口径</th>
+            <th style="width:32%">数据来源</th>
+            <th style="width:10%">详情</th>
+          </tr></thead>
+          <tbody>
+        <tr class="clickable" onclick="openDrawer('SCF-INV-01')">
+          <td><div class="ind-nm">期末存货总额</div><div class="ind-fibo">SCF-INV-01</div></td>
+          <td><div class="ind-desc">期末存货账面金额</div></td>
+          <td><div class="cv-tags"><span class="sf">存货月末余额表</span></div></td>
+          <td><button class="det-btn" onclick="event.stopPropagation();openDrawer('SCF-INV-01')">查看详情</button></td>
+        </tr>
+        <tr class="clickable" onclick="openDrawer('SCF-INV-02')">
+          <td><div class="ind-nm">平均存货余额</div><div class="ind-fibo">SCF-INV-02</div></td>
+          <td><div class="ind-desc">近12月月均存货余额</div></td>
+          <td><div class="cv-tags"><span class="sf">存货月末余额表</span></div></td>
+          <td><button class="det-btn" onclick="event.stopPropagation();openDrawer('SCF-INV-02')">查看详情</button></td>
+        </tr></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="dov" id="dov" onclick="if(event.target.id==='dov')closeDrawer()">
+  <aside class="drw">
+    <div class="dr-hd">
+      <div class="dr-title">
+        <div>
+          <div class="dr-name" id="d-name">—</div>
+          <div class="dr-dim" id="d-dim">—</div>
+        </div>
+        <button class="dr-close" onclick="closeDrawer()">×</button>
+      </div>
+    </div>
+    <div class="drw-body" id="drw-body"></div>
+  </aside>
+</div>
+
+<script>
+const ALL_IND = {"PRE-SOLV-01":{"id":"PRE-SOLV-01","name":"流动比率","topic":"偿债能力","scenario":"贷前","formula":"流动资产/流动负债","biz_desc":"衡量企业短期偿债能力,值越大越能用流动资产覆盖短期债务","fibo":[{"zh":"金融比率 (Ratio)","uri":"fibo-fnd-arr-rt:Ratio"}],"class_name":"CurrentRatio","tables":[{"code":"GL_BALANCE","zh":"总账余额表"}],"fields":[{"tbl_code":"GL_BALANCE","tbl_zh":"总账余额表","items":[{"code":"ACCOUNTCODE","zh":"会计科目编码(冗余)"},{"code":"LOCALCREDITAMOUNT","zh":"本币贷方发生额"},{"code":"LOCALDEBITAMOUNT","zh":"本币借方发生额"},{"code":"PERIOD","zh":"会计期间(月)"},{"code":"PK_ACCOUNTINGBOOK","zh":"账簿主键"},{"code":"PK_ORG","zh":"组织主键(外键→ORG_ORGS.PK_ORG)"}]}],"accounts":[{"code":"1001","zh":"库存现金"},{"code":"1002","zh":"银行存款"},{"code":"1012","zh":"其他货币资金"},{"code":"1101","zh":"交易性金融资产"},{"code":"1121","zh":"应收票据"},{"code":"1122","zh":"应收账款"},{"code":"1123","zh":"预付账款"},{"code":"1125","zh":"应收股利"},{"code":"1126","zh":"应收利息"},{"code":"1131","zh":"科目 1131"},{"code":"1132","zh":"科目 1132"},{"code":"1221","zh":"其他应收款"},{"code":"1231","zh":"坏账准备"},{"code":"1401","zh":"材料采购"},{"code":"1402","zh":"在途物资"},{"code":"1403","zh":"原材料"},{"code":"1404","zh":"材料成本差异"},{"code":"1405","zh":"库存商品"},{"code":"1406","zh":"发出商品"},{"code":"1407","zh":"商品进销差价"},{"code":"1408","zh":"委托加工物资"},{"code":"1411","zh":"周转材料"},{"code":"1471","zh":"存货跌价准备"},{"code":"2001","zh":"短期借款"},{"code":"2101","zh":"交易性金融负债"},{"code":"2201","zh":"应付票据"},{"code":"2202","zh":"应付账款"},{"code":"2203","zh":"预收账款"},{"code":"2204","zh":"合同负债"},{"code":"2211","zh":"应付职工薪酬"},{"code":"2221","zh":"应交税费"},{"code":"2241","zh":"其他应付款"}],"sql":"-- PRE-SOLV-01 流动比率 = 流动资产/流动负债\n-- TODO #GL-1: 确认 LOCALDEBIT/CREDITAMOUNT 为\"累计余额\"口径\n-- TODO #GL-2: 确认 GL_BALANCE 仅含末级科目\n  WITH bal AS (\n    SELECT ACCOUNTCODE,\n           SUM(LOCALDEBITAMOUNT - LOCALCREDITAMOUNT) AS net_debit_bal,\n           SUM(LOCALCREDITAMOUNT - LOCALDEBITAMOUNT) AS net_credit_bal\n    FROM GL_BALANCE\n    WHERE PK_ORG = :org_id AND PK_ACCOUNTINGBOOK = :book_id\n      AND YEAR = :year AND PERIOD = :period\n    GROUP BY ACCOUNTCODE\n  )\n  SELECT ROUND((NVL((SELECT SUM(net_debit_bal) FROM bal WHERE\n    ACCOUNTCODE LIKE '1001%' OR ACCOUNTCODE LIKE '1002%' OR ACCOUNTCODE LIKE '1012%'\n OR ACCOUNTCODE LIKE '1101%' OR ACCOUNTCODE LIKE '1121%' OR ACCOUNTCODE LIKE '1122%'\n OR ACCOUNTCODE LIKE '1123%' OR ACCOUNTCODE LIKE '1131%' OR ACCOUNTCODE LIKE '1132%'\n OR ACCOUNTCODE LIKE '1221%' OR ACCOUNTCODE LIKE '1401%' OR ACCOUNTCODE LIKE '1402%'\n OR ACCOUNTCODE LIKE '1403%' OR ACCOUNTCODE LIKE '1404%' OR ACCOUNTCODE LIKE '1405%'\n OR ACCOUNTCODE LIKE '1406%' OR ACCOUNTCODE LIKE '1408%' OR ACCOUNTCODE LIKE '1411%'\n OR ACCOUNTCODE LIKE '1125%' OR ACCOUNTCODE LIKE '1126%'), 0)\n - NVL((SELECT SUM(ABS(net_debit_bal)) FROM bal WHERE\n    ACCOUNTCODE LIKE '1231%' OR ACCOUNTCODE LIKE '1407%' OR ACCOUNTCODE LIKE '1471%'), 0)\n + NVL((SELECT SUM(net_debit_bal) FROM bal WHERE ACCOUNTCODE LIKE '2221%' AND net_debit_bal > 0), 0)) / NULLIF((NVL((SELECT SUM(ABS(net_debit_bal)) FROM bal WHERE\n    ACCOUNTCODE LIKE '2001%' OR ACCOUNTCODE LIKE '2101%' OR ACCOUNTCODE LIKE '2201%'\n OR ACCOUNTCODE LIKE '2202%' OR ACCOUNTCODE LIKE '2203%' OR ACCOUNTCODE LIKE '2204%'\n OR ACCOUNTCODE LIKE '2211%' OR ACCOUNTCODE LIKE '2241%'), 0)\n + NVL((SELECT SUM(ABS(net_debit_bal)) FROM bal WHERE ACCOUNTCODE LIKE '2221%' AND net_debit_bal < 0), 0)), 0), 4) AS current_ratio FROM dual;","rule_id":"Rule_PRE_SOLV_01"},"PRE-SOLV-03":{"id":"PRE-SOLV-03","name":"现金比率","topic":"偿债能力","scenario":"贷前","formula":"货币资金/流动负债","biz_desc":"最严格的流动性指标,只看现金类资产对短期负债的覆盖","fibo":[{"zh":"金融比率 (Ratio)","uri":"fibo-fnd-arr-rt:Ratio"}],"class_name":"CashRatio","tables":[{"code":"GL_BALANCE","zh":"总账余额表"}],"fields":[{"tbl_code":"GL_BALANCE","tbl_zh":"总账余额表","items":[{"code":"ACCOUNTCODE","zh":"会计科目编码(冗余)"},{"code":"LOCALCREDITAMOUNT","zh":"本币贷方发生额"},{"code":"LOCALDEBITAMOUNT","zh":"本币借方发生额"},{"code":"PERIOD","zh":"会计期间(月)"},{"code":"PK_ACCOUNTINGBOOK","zh":"账簿主键"},{"code":"PK_ORG","zh":"组织主键(外键→ORG_ORGS.PK_ORG)"}]}],"accounts":[{"code":"1001","zh":"库存现金"},{"code":"1002","zh":"银行存款"},{"code":"1012","zh":"其他货币资金"},{"code":"2001","zh":"短期借款"},{"code":"2101","zh":"交易性金融负债"},{"code":"2201","zh":"应付票据"},{"code":"2202","zh":"应付账款"},{"code":"2203","zh":"预收账款"},{"code":"2204","zh":"合同负债"},{"code":"2211","zh":"应付职工薪酬"},{"code":"2221","zh":"应交税费"},{"code":"2241","zh":"其他应付款"}],"sql":"-- PRE-SOLV-03 现金比率 = 货币资金/流动负债\n  WITH bal AS (\n    SELECT ACCOUNTCODE,\n           SUM(LOCALDEBITAMOUNT - LOCALCREDITAMOUNT) AS net_debit_bal,\n           SUM(LOCALCREDITAMOUNT - LOCALDEBITAMOUNT) AS net_credit_bal\n    FROM GL_BALANCE\n    WHERE PK_ORG = :org_id AND PK_ACCOUNTINGBOOK = :book_id\n      AND YEAR = :year AND PERIOD = :period\n    GROUP BY ACCOUNTCODE\n  )\n  SELECT ROUND((NVL((SELECT SUM(net_debit_bal) FROM bal WHERE\n    ACCOUNTCODE LIKE '1001%' OR ACCOUNTCODE LIKE '1002%' OR ACCOUNTCODE LIKE '1012%'), 0)) / NULLIF((NVL((SELECT SUM(ABS(net_debit_bal)) FROM bal WHERE\n    ACCOUNTCODE LIKE '2001%' OR ACCOUNTCODE LIKE '2101%' OR ACCOUNTCODE LIKE '2201%'\n OR ACCOUNTCODE LIKE '2202%' OR ACCOUNTCODE LIKE '2203%' OR ACCOUNTCODE LIKE '2204%'\n OR ACCOUNTCODE LIKE '2211%' OR ACCOUNTCODE LIKE '2241%'), 0)\n + NVL((SELECT SUM(ABS(net_debit_bal)) FROM bal WHERE ACCOUNTCODE LIKE '2221%' AND net_debit_bal < 0), 0)), 0), 4) AS cash_ratio FROM dual;","rule_id":"Rule_PRE_SOLV_03"},"PRE-SOLV-04":{"id":"PRE-SOLV-04","name":"资产负债率","topic":"偿债能力","scenario":"贷前","formula":"总负债/总资产","biz_desc":"负债占总资产的比例,反映企业整体财务杠杆水平","fibo":[{"zh":"金融比率 (Ratio)","uri":"fibo-fnd-arr-rt:Ratio"}],"class_name":"DebtToAssetRatio","tables":[{"code":"GL_BALANCE","zh":"总账余额表"}],"fields":[{"tbl_code":"GL_BALANCE","tbl_zh":"总账余额表","items":[{"code":"ACCOUNTCODE","zh":"会计科目编码(冗余)"},{"code":"LOCALCREDITAMOUNT","zh":"本币贷方发生额"},{"code":"LOCALDEBITAMOUNT","zh":"本币借方发生额"},{"code":"PERIOD","zh":"会计期间(月)"},{"code":"PK_ACCOUNTINGBOOK","zh":"账簿主键"},{"code":"PK_ORG","zh":"组织主键(外键→ORG_ORGS.PK_ORG)"}]}],"accounts":[{"code":"1","zh":"科目 1"},{"code":"1231","zh":"坏账准备"},{"code":"1407","zh":"商品进销差价"},{"code":"1471","zh":"存货跌价准备"},{"code":"1602","zh":"累计折旧"},{"code":"1702","zh":"累计摊销"},{"code":"2","zh":"科目 2"}],"sql":"-- PRE-SOLV-04 资产负债率 = 总负债/总资产\n  WITH bal AS (\n    SELECT ACCOUNTCODE,\n           SUM(LOCALDEBITAMOUNT - LOCALCREDITAMOUNT) AS net_debit_bal,\n           SUM(LOCALCREDITAMOUNT - LOCALDEBITAMOUNT) AS net_credit_bal\n    FROM GL_BALANCE\n    WHERE PK_ORG = :org_id AND PK_ACCOUNTINGBOOK = :book_id\n      AND YEAR = :year AND PERIOD = :period\n    GROUP BY ACCOUNTCODE\n  )\n  SELECT ROUND((NVL((SELECT SUM(ABS(net_debit_bal)) FROM bal WHERE ACCOUNTCODE LIKE '2%' AND net_debit_bal < 0), 0)) / NULLIF((NVL((SELECT SUM(net_debit_bal) FROM bal WHERE ACCOUNTCODE LIKE '1%'), 0)\n - NVL((SELECT SUM(ABS(net_debit_bal)) FROM bal WHERE\n    ACCOUNTCODE LIKE '1231%' OR ACCOUNTCODE LIKE '1407%' OR ACCOUNTCODE LIKE '1471%'\n OR ACCOUNTCODE LIKE '1602%' OR ACCOUNTCODE LIKE '1702%'), 0)), 0), 4) AS debt_to_asset_ratio FROM dual;","rule_id":"Rule_PRE_SOLV_04"},"PRE-SOLV-05":{"id":"PRE-SOLV-05","name":"权益比率","topic":"偿债能力","scenario":"贷前","formula":"所有者权益/总资产","biz_desc":"所有者权益占总资产比例,数值越高企业自有资本越充足","fibo":[{"zh":"金融比率 (Ratio)","uri":"fibo-fnd-arr-rt:Ratio"}],"class_name":"EquityRatio","tables":[{"code":"GL_BALANCE","zh":"总账余额表"}],"fields":[{"tbl_code":"GL_BALANCE","tbl_zh":"总账余额表","items":[{"code":"ACCOUNTCODE","zh":"会计科目编码(冗余)"},{"code":"LOCALCREDITAMOUNT","zh":"本币贷方发生额"},{"code":"LOCALDEBITAMOUNT","zh":"本币借方发生额"},{"code":"PERIOD","zh":"会计期间(月)"},{"code":"PK_ACCOUNTINGBOOK","zh":"账簿主键"},{"code":"PK_ORG","zh":"组织主键(外键→ORG_ORGS.PK_ORG)"}]}],"accounts":[{"code":"1","zh":"科目 1"},{"code":"1231","zh":"坏账准备"},{"code":"1407","zh":"商品进销差价"},{"code":"1471","zh":"存货跌价准备"},{"code":"1602","zh":"累计折旧"},{"code":"1702","zh":"累计摊销"},{"code":"4001","zh":"实收资本"},{"code":"4002","zh":"资本公积"},{"code":"4101","zh":"盈余公积"},{"code":"4104","zh":"利润分配"},{"code":"4201","zh":"库存股"}],"sql":"-- PRE-SOLV-05 权益比率 = 所有者权益/总资产\n  WITH bal AS (\n    SELECT ACCOUNTCODE,\n           SUM(LOCALDEBITAMOUNT - LOCALCREDITAMOUNT) AS net_debit_bal,\n           SUM(LOCALCREDITAMOUNT - LOCALDEBITAMOUNT) AS net_credit_bal\n    FROM GL_BALANCE\n    WHERE PK_ORG = :org_id AND PK_ACCOUNTINGBOOK = :book_id\n      AND YEAR = :year AND PERIOD = :period\n    GROUP BY ACCOUNTCODE\n  )\n  SELECT ROUND((NVL((SELECT SUM(net_credit_bal) FROM bal WHERE\n    ACCOUNTCODE LIKE '4001%' OR ACCOUNTCODE LIKE '4002%'\n OR ACCOUNTCODE LIKE '4101%' OR ACCOUNTCODE LIKE '4104%'), 0)\n - NVL((SELECT SUM(net_debit_bal) FROM bal WHERE ACCOUNTCODE LIKE '4201%'), 0)) / NULLIF((NVL((SELECT SUM(net_debit_bal) FROM bal WHERE ACCOUNTCODE LIKE '1%'), 0)\n - NVL((SELECT SUM(ABS(net_debit_bal)) FROM bal WHERE\n    ACCOUNTCODE LIKE '1231%' OR ACCOUNTCODE LIKE '1407%' OR ACCOUNTCODE LIKE '1471%'\n OR ACCOUNTCODE LIKE '1602%' OR ACCOUNTCODE LIKE '1702%'), 0)), 0), 4) AS equity_ratio FROM dual;","rule_id":"Rule_PRE_SOLV_05"},"PRE-SOLV-06":{"id":"PRE-SOLV-06","name":"产权比率","topic":"偿债能力","scenario":"贷前","formula":"总负债/所有者权益","biz_desc":"负债与权益的比例,衡量企业债务与股东投入的平衡","fibo":[{"zh":"金融比率 (Ratio)","uri":"fibo-fnd-arr-rt:Ratio"}],"class_name":"DebtToEquityRatio","tables":[{"code":"GL_BALANCE","zh":"总账余额表"}],"fields":[{"tbl_code":"GL_BALANCE","tbl_zh":"总账余额表","items":[{"code":"ACCOUNTCODE","zh":"会计科目编码(冗余)"},{"code":"LOCALCREDITAMOUNT","zh":"本币贷方发生额"},{"code":"LOCALDEBITAMOUNT","zh":"本币借方发生额"},{"code":"PERIOD","zh":"会计期间(月)"},{"code":"PK_ACCOUNTINGBOOK","zh":"账簿主键"},{"code":"PK_ORG","zh":"组织主键(外键→ORG_ORGS.PK_ORG)"}]}],"accounts":[{"code":"2","zh":"科目 2"},{"code":"4001","zh":"实收资本"},{"code":"4002","zh":"资本公积"},{"code":"4101","zh":"盈余公积"},{"code":"4104","zh":"利润分配"},{"code":"4201","zh":"库存股"}],"sql":"-- PRE-SOLV-06 产权比率 = 总负债/所有者权益\n  WITH bal AS (\n    SELECT ACCOUNTCODE,\n           SUM(LOCALDEBITAMOUNT - LOCALCREDITAMOUNT) AS net_debit_bal,\n           SUM(LOCALCREDITAMOUNT - LOCALDEBITAMOUNT) AS net_credit_bal\n    FROM GL_BALANCE\n    WHERE PK_ORG = :org_id AND PK_ACCOUNTINGBOOK = :book_id\n      AND YEAR = :year AND PERIOD = :period\n    GROUP BY ACCOUNTCODE\n  )\n  SELECT ROUND((NVL((SELECT SUM(ABS(net_debit_bal)) FROM bal WHERE ACCOUNTCODE LIKE '2%' AND net_debit_bal < 0), 0)) / NULLIF((NVL((SELECT SUM(net_credit_bal) FROM bal WHERE\n    ACCOUNTCODE LIKE '4001%' OR ACCOUNTCODE LIKE '4002%'\n OR ACCOUNTCODE LIKE '4101%' OR ACCOUNTCODE LIKE '4104%'), 0)\n - NVL((SELECT SUM(net_debit_bal) FROM bal WHERE ACCOUNTCODE LIKE '4201%'), 0)), 0), 4) AS debt_to_equity_ratio FROM dual;","rule_id":"Rule_PRE_SOLV_06"},"PRE-SOLV-07":{"id":"PRE-SOLV-07","name":"股东权益乘数","topic":"偿债能力","scenario":"贷前","formula":"总资产/所有者权益","biz_desc":"总资产是所有者权益的几倍,反映财务杠杆倍数","fibo":[{"zh":"金融比率 (Ratio)","uri":"fibo-fnd-arr-rt:Ratio"}],"class_name":"EquityMultiplier","tables":[{"code":"GL_BALANCE","zh":"总账余额表"}],"fields":[{"tbl_code":"GL_BALANCE","tbl_zh":"总账余额表","items":[{"code":"ACCOUNTCODE","zh":"会计科目编码(冗余)"},{"code":"LOCALCREDITAMOUNT","zh":"本币贷方发生额"},{"code":"LOCALDEBITAMOUNT","zh":"本币借方发生额"},{"code":"PERIOD","zh":"会计期间(月)"},{"code":"PK_ACCOUNTINGBOOK","zh":"账簿主键"},{"code":"PK_ORG","zh":"组织主键(外键→ORG_ORGS.PK_ORG)"}]}],"accounts":[{"code":"1","zh":"科目 1"},{"code":"1231","zh":"坏账准备"},{"code":"1407","zh":"商品进销差价"},{"code":"1471","zh":"存货跌价准备"},{"code":"1602","zh":"累计折旧"},{"code":"1702","zh":"累计摊销"},{"code":"4001","zh":"实收资本"},{"code":"4002","zh":"资本公积"},{"code":"4101","zh":"盈余公积"},{"code":"4104","zh":"利润分配"},{"code":"4201","zh":"库存股"}],"sql":"-- PRE-SOLV-07 股东权益乘数 = 总资产/所有者权益\n  WITH bal AS (\n    SELECT ACCOUNTCODE,\n           SUM(LOCALDEBITAMOUNT - LOCALCREDITAMOUNT) AS net_debit_bal,\n           SUM(LOCALCREDITAMOUNT - LOCALDEBITAMOUNT) AS net_credit_bal\n    FROM GL_BALANCE\n    WHERE PK_ORG = :org_id AND PK_ACCOUNTINGBOOK = :book_id\n      AND YEAR = :year AND PERIOD = :period\n    GROUP BY ACCOUNTCODE\n  )\n  SELECT ROUND((NVL((SELECT SUM(net_debit_bal) FROM bal WHERE ACCOUNTCODE LIKE '1%'), 0)\n - NVL((SELECT SUM(ABS(net_debit_bal)) FROM bal WHERE\n    ACCOUNTCODE LIKE '1231%' OR ACCOUNTCODE LIKE '1407%' OR ACCOUNTCODE LIKE '1471%'\n OR ACCOUNTCODE LIKE '1602%' OR ACCOUNTCODE LIKE '1702%'), 0)) / NULLIF((NVL((SELECT SUM(net_credit_bal) FROM bal WHERE\n    ACCOUNTCODE LIKE '4001%' OR ACCOUNTCODE LIKE '4002%'\n OR ACCOUNTCODE LIKE '4101%' OR ACCOUNTCODE LIKE '4104%'), 0)\n - NVL((SELECT SUM(net_debit_bal) FROM bal WHERE ACCOUNTCODE LIKE '4201%'), 0)), 0), 4) AS equity_multiplier FROM dual;","rule_id":"Rule_PRE_SOLV_07"},"PRE-SOLV-08":{"id":"PRE-SOLV-08","name":"长期负债占比","topic":"偿债能力","scenario":"贷前","formula":"长期负债/总资产","biz_desc":"长期负债占总资产比例,衡量长期偿债压力","fibo":[{"zh":"金融比率 (Ratio)","uri":"fibo-fnd-arr-rt:Ratio"},{"zh":"债务 (Debt)","uri":"fibo-fbc-dae-dbt:Debt"}],"class_name":"LongTermDebtRatio","tables":[{"code":"GL_BALANCE","zh":"总账余额表"}],"fields":[{"tbl_code":"GL_BALANCE","tbl_zh":"总账余额表","items":[{"code":"ACCOUNTCODE","zh":"会计科目编码(冗余)"},{"code":"LOCALCREDITAMOUNT","zh":"本币贷方发生额"},{"code":"LOCALDEBITAMOUNT","zh":"本币借方发生额"},{"code":"PERIOD","zh":"会计期间(月)"},{"code":"PK_ACCOUNTINGBOOK","zh":"账簿主键"},{"code":"PK_ORG","zh":"组织主键(外键→ORG_ORGS.PK_ORG)"}]}],"accounts":[{"code":"1","zh":"科目 1"},{"code":"1231","zh":"坏账准备"},{"code":"1407","zh":"商品进销差价"},{"code":"1471","zh":"存货跌价准备"},{"code":"1602","zh":"累计折旧"},{"code":"1702","zh":"累计摊销"},{"code":"2501","zh":"长期借款"},{"code":"2502","zh":"应付债券"},{"code":"2701","zh":"长期应付款"}],"sql":"-- PRE-SOLV-08 长期负债占比 = 长期负债/总资产\n  WITH bal AS (\n    SELECT ACCOUNTCODE,\n           SUM(LOCALDEBITAMOUNT - LOCALCREDITAMOUNT) AS net_debit_bal,\n           SUM(LOCALCREDITAMOUNT - LOCALDEBITAMOUNT) AS net_credit_bal\n    FROM GL_BALANCE\n    WHERE PK_ORG = :org_id AND PK_ACCOUNTINGBOOK = :book_id\n      AND YEAR = :year AND PERIOD = :period\n    GROUP BY ACCOUNTCODE\n  )\n  SELECT ROUND((NVL((SELECT SUM(ABS(net_debit_bal)) FROM bal WHERE\n    ACCOUNTCODE LIKE '2501%' OR ACCOUNTCODE LIKE '2502%' OR ACCOUNTCODE LIKE '2701%'), 0)) / NULLIF((NVL((SELECT SUM(net_debit_bal) FROM bal WHERE ACCOUNTCODE LIKE '1%'), 0)\n - NVL((SELECT SUM(ABS(net_debit_bal)) FROM bal WHERE\n    ACCOUNTCODE LIKE '1231%' OR ACCOUNTCODE LIKE '1407%' OR ACCOUNTCODE LIKE '1471%'\n OR ACCOUNTCODE LIKE '1602%' OR ACCOUNTCODE LIKE '1702%'), 0)), 0), 4) AS long_term_debt_ratio FROM dual;","rule_id":"Rule_PRE_SOLV_08"},"PRE-PROF-01":{"id":"PRE-PROF-01","name":"毛利率","topic":"盈利能力","scenario":"贷前","formula":"(营收-营业成本)/营收","biz_desc":"毛利占收入的比例,反映产品/服务本身的盈利空间","fibo":[{"zh":"金融比率 (Ratio)","uri":"fibo-fnd-arr-rt:Ratio"}],"class_name":"GrossMargin","tables":[{"code":"GL_BALANCE","zh":"总账余额表"}],"fields":[{"tbl_code":"GL_BALANCE","tbl_zh":"总账余额表","items":[{"code":"ACCOUNTCODE","zh":"会计科目编码(冗余)"},{"code":"LOCALCREDITAMOUNT","zh":"本币贷方发生额"},{"code":"LOCALDEBITAMOUNT","zh":"本币借方发生额"},{"code":"PERIOD","zh":"会计期间(月)"},{"code":"PK_ACCOUNTINGBOOK","zh":"账簿主键"},{"code":"PK_ORG","zh":"组织主键(外键→ORG_ORGS.PK_ORG)"}]}],"accounts":[{"code":"6001","zh":"主营业务收入"},{"code":"6051","zh":"其他业务收入"},{"code":"6401","zh":"主营业务成本"},{"code":"6402","zh":"其他业务成本"}],"sql":"-- PRE-PROF-01 毛利率 = (营收-营业成本)/营收\n  WITH bal AS (\n    SELECT ACCOUNTCODE,\n           SUM(LOCALDEBITAMOUNT - LOCALCREDITAMOUNT) AS net_debit_bal,\n           SUM(LOCALCREDITAMOUNT - LOCALDEBITAMOUNT) AS net_credit_bal\n    FROM GL_BALANCE\n    WHERE PK_ORG = :org_id AND PK_ACCOUNTINGBOOK = :book_id\n      AND YEAR = :year AND PERIOD = :period\n    GROUP BY ACCOUNTCODE\n  )\n  SELECT ROUND(((NVL((SELECT SUM(net_credit_bal) FROM bal WHERE\n    ACCOUNTCODE LIKE '6001%' OR ACCOUNTCODE LIKE '6051%'), 0)) - (NVL((SELECT SUM(net_debit_bal) FROM bal WHERE\n    ACCOUNTCODE LIKE '6401%' OR ACCOUNTCODE LIKE '6402%'), 0))) / NULLIF((NVL((SELECT SUM(net_credit_bal) FROM bal WHERE\n    ACCOUNTCODE LIKE '6001%' OR ACCOUNTCODE LIKE '6051%'), 0)), 0), 4) AS gross_margin FROM dual;","rule_id":"Rule_PRE_PROF_01"},"PRE-PROF-02":{"id":"PRE-PROF-02","name":"净利率","topic":"盈利能力","scenario":"贷前","formula":"净利润/营收","biz_desc":"净利润占收入比例,反映整体盈利水平","fibo":[{"zh":"金融比率 (Ratio)","uri":"fibo-fnd-arr-rt:Ratio"}],"class_name":"NetProfitMargin","tables":[{"code":"GL_BALANCE","zh":"总账余额表"}],"fields":[{"tbl_code":"GL_BALANCE","tbl_zh":"总账余额表","items":[{"code":"ACCOUNTCODE","zh":"会计科目编码(冗余)"},{"code":"LOCALCREDITAMOUNT","zh":"本币贷方发生额"},{"code":"LOCALDEBITAMOUNT","zh":"本币借方发生额"},{"code":"PERIOD","zh":"会计期间(月)"},{"code":"PK_ACCOUNTINGBOOK","zh":"账簿主键"},{"code":"PK_ORG","zh":"组织主键(外键→ORG_ORGS.PK_ORG)"}]}],"accounts":[{"code":"6001","zh":"主营业务收入"},{"code":"6051","zh":"其他业务收入"},{"code":"6111","zh":"投资收益"},{"code":"6117","zh":"其他收益"},{"code":"6301","zh":"营业外收入"},{"code":"6401","zh":"主营业务成本"},{"code":"6402","zh":"其他业务成本"},{"code":"6403","zh":"税金及附加"},{"code":"6601","zh":"销售费用"},{"code":"6602","zh":"管理费用"},{"code":"6603","zh":"财务费用"},{"code":"6604","zh":"研发费用"},{"code":"6701","zh":"资产减值损失"},{"code":"6702","zh":"信用减值损失"},{"code":"6711","zh":"营业外支出"},{"code":"6801","zh":"所得税费用"}],"sql":"-- PRE-PROF-02 净利率 = 净利润/营收\n  WITH bal AS (\n    SELECT ACCOUNTCODE,\n           SUM(LOCALDEBITAMOUNT - LOCALCREDITAMOUNT) AS net_debit_bal,\n           SUM(LOCALCREDITAMOUNT - LOCALDEBITAMOUNT) AS net_credit_bal\n    FROM GL_BALANCE\n    WHERE PK_ORG = :org_id AND PK_ACCOUNTINGBOOK = :book_id\n      AND YEAR = :year AND PERIOD = :period\n    GROUP BY ACCOUNTCODE\n  )\n  SELECT ROUND((NVL((SELECT SUM(net_credit_bal) FROM bal WHERE ACCOUNTCODE LIKE '6001%' OR ACCOUNTCODE LIKE '6051%'), 0)\n - NVL((SELECT SUM(net_debit_bal) FROM bal WHERE\n    ACCOUNTCODE LIKE '6401%' OR ACCOUNTCODE LIKE '6402%' OR ACCOUNTCODE LIKE '6403%'\n OR ACCOUNTCODE LIKE '6601%' OR ACCOUNTCODE LIKE '6602%' OR ACCOUNTCODE LIKE '6603%'\n OR ACCOUNTCODE LIKE '6604%' OR ACCOUNTCODE LIKE '6701%' OR ACCOUNTCODE LIKE '6702%'\n OR ACCOUNTCODE LIKE '6711%' OR ACCOUNTCODE LIKE '6801%'), 0)\n + NVL((SELECT SUM(net_credit_bal) FROM bal WHERE\n    ACCOUNTCODE LIKE '6111%' OR ACCOUNTCODE LIKE '6117%' OR ACCOUNTCODE LIKE '6301%'), 0)) / NULLIF((NVL((SELECT SUM(net_credit_bal) FROM bal WHERE\n    ACCOUNTCODE LIKE '6001%' OR ACCOUNTCODE LIKE '6051%'), 0)), 0), 4) AS net_profit_margin FROM dual;","rule_id":"Rule_PRE_PROF_02"},"PRE-PROF-03":{"id":"PRE-PROF-03","name":"营业利润率","topic":"盈利能力","scenario":"贷前","formula":"营业利润/营收","biz_desc":"营业利润占收入比例,剔除非经营性损益后的盈利能力","fibo":[{"zh":"金融比率 (Ratio)","uri":"fibo-fnd-arr-rt:Ratio"}],"class_name":"OperatingMargin","tables":[{"code":"GL_BALANCE","zh":"总账余额表"}],"fields":[{"tbl_code":"GL_BALANCE","tbl_zh":"总账余额表","items":[{"code":"ACCOUNTCODE","zh":"会计科目编码(冗余)"},{"code":"LOCALCREDITAMOUNT","zh":"本币贷方发生额"},{"code":"LOCALDEBITAMOUNT","zh":"本币借方发生额"},{"code":"PERIOD","zh":"会计期间(月)"},{"code":"PK_ACCOUNTINGBOOK","zh":"账簿主键"},{"code":"PK_ORG","zh":"组织主键(外键→ORG_ORGS.PK_ORG)"}]}],"accounts":[{"code":"6001","zh":"主营业务收入"},{"code":"6051","zh":"其他业务收入"},{"code":"6111","zh":"投资收益"},{"code":"6117","zh":"其他收益"},{"code":"6401","zh":"主营业务成本"},{"code":"6402","zh":"其他业务成本"},{"code":"6403","zh":"税金及附加"},{"code":"6601","zh":"销售费用"},{"code":"6602","zh":"管理费用"},{"code":"6603","zh":"财务费用"},{"code":"6604","zh":"研发费用"},{"code":"6701","zh":"资产减值损失"},{"code":"6702","zh":"信用减值损失"}],"sql":"-- PRE-PROF-03 营业利润率 = 营业利润/营收\n  WITH bal AS (\n    SELECT ACCOUNTCODE,\n           SUM(LOCALDEBITAMOUNT - LOCALCREDITAMOUNT) AS net_debit_bal,\n           SUM(LOCALCREDITAMOUNT - LOCALDEBITAMOUNT) AS net_credit_bal\n    FROM GL_BALANCE\n    WHERE PK_ORG = :org_id AND PK_ACCOUNTINGBOOK = :book_id\n      AND YEAR = :year AND PERIOD = :period\n    GROUP BY ACCOUNTCODE\n  )\n  SELECT ROUND((NVL((SELECT SUM(net_credit_bal) FROM bal WHERE ACCOUNTCODE LIKE '6001%' OR ACCOUNTCODE LIKE '6051%'), 0)\n - NVL((SELECT SUM(net_debit_bal) FROM bal WHERE\n    ACCOUNTCODE LIKE '6401%' OR ACCOUNTCODE LIKE '6402%' OR ACCOUNTCODE LIKE '6403%'\n OR ACCOUNTCODE LIKE '6601%' OR ACCOUNTCODE LIKE '6602%' OR ACCOUNTCODE LIKE '6603%'\n OR ACCOUNTCODE LIKE '6604%' OR ACCOUNTCODE LIKE '6701%' OR ACCOUNTCODE LIKE '6702%'), 0)\n + NVL((SELECT SUM(net_credit_bal) FROM bal WHERE\n    ACCOUNTCODE LIKE '6111%' OR ACCOUNTCODE LIKE '6117%'), 0)) / NULLIF((NVL((SELECT SUM(net_credit_bal) FROM bal WHERE\n    ACCOUNTCODE LIKE '6001%' OR ACCOUNTCODE LIKE '6051%'), 0)), 0), 4) AS operating_margin FROM dual;","rule_id":"Rule_PRE_PROF_03"},"PRE-PROF-04":{"id":"PRE-PROF-04","name":"主营业务利润率","topic":"盈利能力","scenario":"贷前","formula":"(主营收入-主营成本)/主营收入","biz_desc":"主营业务(剔除其他业务)的毛利率,反映核心业务盈利能力","fibo":[{"zh":"金融比率 (Ratio)","uri":"fibo-fnd-arr-rt:Ratio"}],"class_name":"CoreBusinessMargin","tables":[{"code":"GL_BALANCE","zh":"总账余额表"}],"fields":[{"tbl_code":"GL_BALANCE","tbl_zh":"总账余额表","items":[{"code":"ACCOUNTCODE","zh":"会计科目编码(冗余)"},{"code":"LOCALCREDITAMOUNT","zh":"本币贷方发生额"},{"code":"LOCALDEBITAMOUNT","zh":"本币借方发生额"},{"code":"PERIOD","zh":"会计期间(月)"},{"code":"PK_ACCOUNTINGBOOK","zh":"账簿主键"},{"code":"PK_ORG","zh":"组织主键(外键→ORG_ORGS.PK_ORG)"}]}],"accounts":[{"code":"6001","zh":"主营业务收入"},{"code":"6401","zh":"主营业务成本"}],"sql":"-- PRE-PROF-04 主营业务利润率 = (主营收入-主营成本)/主营收入\n  WITH bal AS (\n    SELECT ACCOUNTCODE,\n           SUM(LOCALDEBITAMOUNT - LOCALCREDITAMOUNT) AS net_debit_bal,\n           SUM(LOCALCREDITAMOUNT - LOCALDEBITAMOUNT) AS net_credit_bal\n    FROM GL_BALANCE\n    WHERE PK_ORG = :org_id AND PK_ACCOUNTINGBOOK = :book_id\n      AND YEAR = :year AND PERIOD = :period\n    GROUP BY ACCOUNTCODE\n  )\n  SELECT ROUND(((NVL((SELECT SUM(net_credit_bal) FROM bal WHERE ACCOUNTCODE LIKE '6001%'), 0)) - (NVL((SELECT SUM(net_debit_bal) FROM bal WHERE ACCOUNTCODE LIKE '6401%'), 0))) / NULLIF((NVL((SELECT SUM(net_credit_bal) FROM bal WHERE ACCOUNTCODE LIKE '6001%'), 0)), 0), 4) AS core_margin FROM dual;","rule_id":"Rule_PRE_PROF_04"},"PRE-PROF-05":{"id":"PRE-PROF-05","name":"销售费用率","topic":"盈利能力","scenario":"贷前","formula":"销售费用/营收","biz_desc":"销售费用占收入比例,反映销售成本压力","fibo":[{"zh":"金融比率 (Ratio)","uri":"fibo-fnd-arr-rt:Ratio"}],"class_name":"SalesExpenseRatio","tables":[{"code":"GL_BALANCE","zh":"总账余额表"}],"fields":[{"tbl_code":"GL_BALANCE","tbl_zh":"总账余额表","items":[{"code":"ACCOUNTCODE","zh":"会计科目编码(冗余)"},{"code":"LOCALCREDITAMOUNT","zh":"本币贷方发生额"},{"code":"LOCALDEBITAMOUNT","zh":"本币借方发生额"},{"code":"PERIOD","zh":"会计期间(月)"},{"code":"PK_ACCOUNTINGBOOK","zh":"账簿主键"},{"code":"PK_ORG","zh":"组织主键(外键→ORG_ORGS.PK_ORG)"}]}],"accounts":[{"code":"6001","zh":"主营业务收入"},{"code":"6051","zh":"其他业务收入"},{"code":"6601","zh":"销售费用"}],"sql":"-- PRE-PROF-05 销售费用率 = 销售费用/营收\n  WITH bal AS (\n    SELECT ACCOUNTCODE,\n           SUM(LOCALDEBITAMOUNT - LOCALCREDITAMOUNT) AS net_debit_bal,\n           SUM(LOCALCREDITAMOUNT - LOCALDEBITAMOUNT) AS net_credit_bal\n    FROM GL_BALANCE\n    WHERE PK_ORG = :org_id AND PK_ACCOUNTINGBOOK = :book_id\n      AND YEAR = :year AND PERIOD = :period\n    GROUP BY ACCOUNTCODE\n  )\n  SELECT ROUND(\n    NVL((SELECT SUM(net_debit_bal) FROM bal WHERE ACCOUNTCODE LIKE '6601%'), 0) /\n    NULLIF((NVL((SELECT SUM(net_credit_bal) FROM bal WHERE\n    ACCOUNTCODE LIKE '6001%' OR ACCOUNTCODE LIKE '6051%'), 0)), 0), 4) AS sales_expense_ratio FROM dual;","rule_id":"Rule_PRE_PROF_05"},"PRE-PROF-06":{"id":"PRE-PROF-06","name":"管理费用率","topic":"盈利能力","scenario":"贷前","formula":"管理费用/营收","biz_desc":"管理费用占收入比例,反映行政管理成本压力","fibo":[{"zh":"金融比率 (Ratio)","uri":"fibo-fnd-arr-rt:Ratio"}],"class_name":"AdminExpenseRatio","tables":[{"code":"GL_BALANCE","zh":"总账余额表"}],"fields":[{"tbl_code":"GL_BALANCE","tbl_zh":"总账余额表","items":[{"code":"ACCOUNTCODE","zh":"会计科目编码(冗余)"},{"code":"LOCALCREDITAMOUNT","zh":"本币贷方发生额"},{"code":"LOCALDEBITAMOUNT","zh":"本币借方发生额"},{"code":"PERIOD","zh":"会计期间(月)"},{"code":"PK_ACCOUNTINGBOOK","zh":"账簿主键"},{"code":"PK_ORG","zh":"组织主键(外键→ORG_ORGS.PK_ORG)"}]}],"accounts":[{"code":"6001","zh":"主营业务收入"},{"code":"6051","zh":"其他业务收入"},{"code":"6602","zh":"管理费用"}],"sql":"-- PRE-PROF-06 管理费用率 = 管理费用/营收\n  WITH bal AS (\n    SELECT ACCOUNTCODE,\n           SUM(LOCALDEBITAMOUNT - LOCALCREDITAMOUNT) AS net_debit_bal,\n           SUM(LOCALCREDITAMOUNT - LOCALDEBITAMOUNT) AS net_credit_bal\n    FROM GL_BALANCE\n    WHERE PK_ORG = :org_id AND PK_ACCOUNTINGBOOK = :book_id\n      AND YEAR = :year AND PERIOD = :period\n    GROUP BY ACCOUNTCODE\n  )\n  SELECT ROUND(\n    NVL((SELECT SUM(net_debit_bal) FROM bal WHERE ACCOUNTCODE LIKE '6602%'), 0) /\n    NULLIF((NVL((SELECT SUM(net_credit_bal) FROM bal WHERE\n    ACCOUNTCODE LIKE '6001%' OR ACCOUNTCODE LIKE '6051%'), 0)), 0), 4) AS admin_expense_ratio FROM dual;","rule_id":"Rule_PRE_PROF_06"},"PRE-PROF-07":{"id":"PRE-PROF-07","name":"财务费用率","topic":"盈利能力","scenario":"贷前","formula":"财务费用/营收","biz_desc":"财务费用占收入比例,反映融资成本压力","fibo":[{"zh":"金融比率 (Ratio)","uri":"fibo-fnd-arr-rt:Ratio"}],"class_name":"FinanceExpenseRatio","tables":[{"code":"GL_BALANCE","zh":"总账余额表"}],"fields":[{"tbl_code":"GL_BALANCE","tbl_zh":"总账余额表","items":[{"code":"ACCOUNTCODE","zh":"会计科目编码(冗余)"},{"code":"LOCALCREDITAMOUNT","zh":"本币贷方发生额"},{"code":"LOCALDEBITAMOUNT","zh":"本币借方发生额"},{"code":"PERIOD","zh":"会计期间(月)"},{"code":"PK_ACCOUNTINGBOOK","zh":"账簿主键"},{"code":"PK_ORG","zh":"组织主键(外键→ORG_ORGS.PK_ORG)"}]}],"accounts":[{"code":"6001","zh":"主营业务收入"},{"code":"6051","zh":"其他业务收入"},{"code":"6603","zh":"财务费用"}],"sql":"-- PRE-PROF-07 财务费用率 = 财务费用/营收\n  WITH bal AS (\n    SELECT ACCOUNTCODE,\n           SUM(LOCALDEBITAMOUNT - LOCALCREDITAMOUNT) AS net_debit_bal,\n           SUM(LOCALCREDITAMOUNT - LOCALDEBITAMOUNT) AS net_credit_bal\n    FROM GL_BALANCE\n    WHERE PK_ORG = :org_id AND PK_ACCOUNTINGBOOK = :book_id\n      AND YEAR = :year AND PERIOD = :period\n    GROUP BY ACCOUNTCODE\n  )\n  SELECT ROUND(\n    NVL((SELECT SUM(net_debit_bal) FROM bal WHERE ACCOUNTCODE LIKE '6603%'), 0) /\n    NULLIF((NVL((SELECT SUM(net_credit_bal) FROM bal WHERE\n    ACCOUNTCODE LIKE '6001%' OR ACCOUNTCODE LIKE '6051%'), 0)), 0), 4) AS finance_expense_ratio FROM dual;","rule_id":"Rule_PRE_PROF_07"},"PRE-PROF-08":{"id":"PRE-PROF-08","name":"研发费用率","topic":"盈利能力","scenario":"贷前","formula":"研发费用/营收","biz_desc":"研发费用占收入比例,反映技术投入强度","fibo":[{"zh":"金融比率 (Ratio)","uri":"fibo-fnd-arr-rt:Ratio"}],"class_name":"RDExpenseRatio","tables":[{"code":"GL_BALANCE","zh":"总账余额表"}],"fields":[{"tbl_code":"GL_BALANCE","tbl_zh":"总账余额表","items":[{"code":"ACCOUNTCODE","zh":"会计科目编码(冗余)"},{"code":"LOCALCREDITAMOUNT","zh":"本币贷方发生额"},{"code":"LOCALDEBITAMOUNT","zh":"本币借方发生额"},{"code":"PERIOD","zh":"会计期间(月)"},{"code":"PK_ACCOUNTINGBOOK","zh":"账簿主键"},{"code":"PK_ORG","zh":"组织主键(外键→ORG_ORGS.PK_ORG)"}]}],"accounts":[{"code":"6001","zh":"主营业务收入"},{"code":"6051","zh":"其他业务收入"},{"code":"6604","zh":"研发费用"}],"sql":"-- PRE-PROF-08 研发费用率 = 研发费用/营收\n  WITH bal AS (\n    SELECT ACCOUNTCODE,\n           SUM(LOCALDEBITAMOUNT - LOCALCREDITAMOUNT) AS net_debit_bal,\n           SUM(LOCALCREDITAMOUNT - LOCALDEBITAMOUNT) AS net_credit_bal\n    FROM GL_BALANCE\n    WHERE PK_ORG = :org_id AND PK_ACCOUNTINGBOOK = :book_id\n      AND YEAR = :year AND PERIOD = :period\n    GROUP BY ACCOUNTCODE\n  )\n  SELECT ROUND(\n    NVL((SELECT SUM(net_debit_bal) FROM bal WHERE ACCOUNTCODE LIKE '6604%'), 0) /\n    NULLIF((NVL((SELECT SUM(net_credit_bal) FROM bal WHERE\n    ACCOUNTCODE LIKE '6001%' OR ACCOUNTCODE LIKE '6051%'), 0)), 0), 4) AS rd_expense_ratio FROM dual;","rule_id":"Rule_PRE_PROF_08"},"PRE-PROF-09":{"id":"PRE-PROF-09","name":"三费率","topic":"盈利能力","scenario":"贷前","formula":"(销售+管理+财务费用)/营收","biz_desc":"销售+管理+财务三大期间费用占收入比例","fibo":[{"zh":"金融比率 (Ratio)","uri":"fibo-fnd-arr-rt:Ratio"}],"class_name":"TotalExpenseRatio","tables":[{"code":"GL_BALANCE","zh":"总账余额表"}],"fields":[{"tbl_code":"GL_BALANCE","tbl_zh":"总账余额表","items":[{"code":"ACCOUNTCODE","zh":"会计科目编码(冗余)"},{"code":"LOCALCREDITAMOUNT","zh":"本币贷方发生额"},{"code":"LOCALDEBITAMOUNT","zh":"本币借方发生额"},{"code":"PERIOD","zh":"会计期间(月)"},{"code":"PK_ACCOUNTINGBOOK","zh":"账簿主键"},{"code":"PK_ORG","zh":"组织主键(外键→ORG_ORGS.PK_ORG)"}]}],"accounts":[{"code":"6001","zh":"主营业务收入"},{"code":"6051","zh":"其他业务收入"},{"code":"6601","zh":"销售费用"},{"code":"6602","zh":"管理费用"},{"code":"6603","zh":"财务费用"}],"sql":"-- PRE-PROF-09 三费率 = (销售+管理+财务费用)/营收\n  WITH bal AS (\n    SELECT ACCOUNTCODE,\n           SUM(LOCALDEBITAMOUNT - LOCALCREDITAMOUNT) AS net_debit_bal,\n           SUM(LOCALCREDITAMOUNT - LOCALDEBITAMOUNT) AS net_credit_bal\n    FROM GL_BALANCE\n    WHERE PK_ORG = :org_id AND PK_ACCOUNTINGBOOK = :book_id\n      AND YEAR = :year AND PERIOD = :period\n    GROUP BY ACCOUNTCODE\n  )\n  SELECT ROUND(\n    NVL((SELECT SUM(net_debit_bal) FROM bal WHERE\n        ACCOUNTCODE LIKE '6601%' OR ACCOUNTCODE LIKE '6602%' OR ACCOUNTCODE LIKE '6603%'), 0) /\n    NULLIF((NVL((SELECT SUM(net_credit_bal) FROM bal WHERE\n    ACCOUNTCODE LIKE '6001%' OR ACCOUNTCODE LIKE '6051%'), 0)), 0), 4) AS total_expense_ratio FROM dual;","rule_id":"Rule_PRE_PROF_09"},"PRE-CUST-01":{"id":"PRE-CUST-01","name":"活跃客户数","topic":"客户结构","scenario":"贷前","formula":"近12月有业务的客户数","biz_desc":"近12个月有应收业务往来的活跃客户数","fibo":[{"zh":"交易对手 (Counterparty)","uri":"fibo-fbc-pas-fpas:Counterparty"}],"class_name":"ActiveCustomerCount","tables":[{"code":"AR_RECITEM","zh":"应收单明细表"}],"fields":[{"tbl_code":"AR_RECITEM","tbl_zh":"应收单明细表","items":[{"code":"BILLDATE","zh":"单据日期"},{"code":"CUSTOMER","zh":"客户主键(外键→BD_CUSTOMER.PK_CUSTOMER)"},{"code":"PK_ORG","zh":"组织"}]}],"accounts":[],"sql":"-- PRE-CUST-01 活跃客户数 = 近 12 个月有应收业务的 DISTINCT 客户数\nSELECT COUNT(DISTINCT CUSTOMER) AS active_customer_count\nFROM AR_RECITEM\nWHERE PK_ORG = :org_id\n  AND BILLDATE >= TO_CHAR(ADD_MONTHS(TO_DATE(:asof_date,'YYYY-MM-DD'), -12), 'YYYY-MM-DD HH24:MI:SS')\n  AND BILLDATE <= :asof_date||' 23:59:59';","rule_id":"Rule_PRE_CUST_01"},"PRE-CUST-02":{"id":"PRE-CUST-02","name":"累计客户数","topic":"客户结构","scenario":"贷前","formula":"COUNT(客户档案)","biz_desc":"档案库中启用状态的客户总数","fibo":[{"zh":"交易对手 (Counterparty)","uri":"fibo-fbc-pas-fpas:Counterparty"}],"class_name":"TotalCustomerCount","tables":[{"code":"BD_CUSTOMER","zh":"客户基础档案"}],"fields":[{"tbl_code":"BD_CUSTOMER","tbl_zh":"客户基础档案","items":[{"code":"ENABLESTATE","zh":"启用状态"},{"code":"PK_ORG","zh":"所属组织"}]}],"accounts":[],"sql":"-- PRE-CUST-02 累计客户数 = 档案表启用态客户总数\nSELECT COUNT(*) AS total_customer_count\nFROM BD_CUSTOMER\nWHERE PK_ORG = :org_id\n  AND ENABLESTATE = 2  -- TODO #BD-1: 启用态枚举,默认 2=启用\n  AND NVL(DR, 0) = 0;","rule_id":"Rule_PRE_CUST_02"},"PRE-CUST-03":{"id":"PRE-CUST-03","name":"期间销售总额","topic":"客户结构","scenario":"贷前","formula":"SUM(销售发票金额)","biz_desc":"报告期内销售发票金额合计","fibo":[{"zh":"货币金额 (MonetaryAmount)","uri":"fibo-fnd-acc-cur:MonetaryAmount"}],"class_name":"PeriodSalesAmount","tables":[{"code":"SO_SALEINVOICE","zh":"销售发票主表"}],"fields":[{"tbl_code":"SO_SALEINVOICE","tbl_zh":"销售发票主表","items":[{"code":"DBILLDATE","zh":"单据日期"},{"code":"NTOTALORIGMNY","zh":"总原币金额"},{"code":"PK_ORG","zh":"组织"}]}],"accounts":[],"sql":"-- PRE-CUST-03 期间销售总额 = SUM(销售发票原币金额)\nSELECT NVL(SUM(NTOTALORIGMNY), 0) AS period_sales_amount\nFROM SO_SALEINVOICE\nWHERE PK_ORG = :org_id\n  AND DBILLDATE BETWEEN :start_date AND :asof_date\n  AND NVL(DR, 0) = 0;\n-- TODO #AMT-1: NTOTALORIGMNY 是原币;如需本币需叠加汇率折算","rule_id":"Rule_PRE_CUST_03"},"PRE-CUST-04":{"id":"PRE-CUST-04","name":"期间销售笔数","topic":"客户结构","scenario":"贷前","formula":"COUNT(销售发票)","biz_desc":"报告期内开具的销售发票总笔数","fibo":[],"class_name":"SalesInvoiceCount","tables":[{"code":"SO_SALEINVOICE","zh":"销售发票主表"}],"fields":[{"tbl_code":"SO_SALEINVOICE","tbl_zh":"销售发票主表","items":[{"code":"DBILLDATE","zh":"单据日期"},{"code":"PK_ORG","zh":"组织"}]}],"accounts":[],"sql":"-- PRE-CUST-04 期间销售笔数 = COUNT(销售发票)\nSELECT COUNT(*) AS sales_invoice_count\nFROM SO_SALEINVOICE\nWHERE PK_ORG = :org_id\n  AND DBILLDATE BETWEEN :start_date AND :asof_date\n  AND NVL(DR, 0) = 0;","rule_id":"Rule_PRE_CUST_04"},"PRE-CUST-05":{"id":"PRE-CUST-05","name":"销售平均单笔金额","topic":"客户结构","scenario":"贷前","formula":"销售总额/笔数","biz_desc":"平均每笔销售发票的金额","fibo":[{"zh":"货币金额 (MonetaryAmount)","uri":"fibo-fnd-acc-cur:MonetaryAmount"}],"class_name":"AvgSalesAmount","tables":[{"code":"SO_SALEINVOICE","zh":"销售发票主表"}],"fields":[{"tbl_code":"SO_SALEINVOICE","tbl_zh":"销售发票主表","items":[{"code":"DBILLDATE","zh":"单据日期"},{"code":"NTOTALORIGMNY","zh":"总原币金额"},{"code":"PK_ORG","zh":"组织"}]}],"accounts":[],"sql":"-- PRE-CUST-05 销售平均单笔金额\nSELECT ROUND(NVL(SUM(NTOTALORIGMNY), 0) / NULLIF(COUNT(*), 0), 2) AS avg_sales_amount\nFROM SO_SALEINVOICE\nWHERE PK_ORG = :org_id\n  AND DBILLDATE BETWEEN :start_date AND :asof_date\n  AND NVL(DR, 0) = 0;","rule_id":"Rule_PRE_CUST_05"},"PRE-CUST-08":{"id":"PRE-CUST-08","name":"客户应收总额","topic":"客户结构","scenario":"贷前","formula":"SUM(应收余额) where BILLCLASS=AR","biz_desc":"应收账款余额总额(客户欠款合计)","fibo":[{"zh":"货币金额 (MonetaryAmount)","uri":"fibo-fnd-acc-cur:MonetaryAmount"},{"zh":"债务 (Debt)","uri":"fibo-fbc-dae-dbt:Debt"}],"class_name":"CustomerReceivable","tables":[{"code":"ARAP_BALANCE","zh":"往来余额表"}],"fields":[{"tbl_code":"ARAP_BALANCE","tbl_zh":"往来余额表","items":[{"code":"ACCPERIOD","zh":"会计期间"},{"code":"ACCYEAR","zh":"会计年度"},{"code":"BILLCLASS","zh":"单据类别(AR/AP)"},{"code":"LOCAL_MONEY_CR","zh":"本币贷方"},{"code":"LOCAL_MONEY_DE","zh":"本币借方"},{"code":"PK_ORG","zh":"组织"}]}],"accounts":[],"sql":"-- PRE-CUST-08 客户应收总额 = SUM(应收余额)\nSELECT NVL(SUM(LOCAL_MONEY_DE - LOCAL_MONEY_CR), 0) AS customer_receivable\nFROM ARAP_BALANCE\nWHERE PK_ORG = :org_id\n  AND ACCYEAR = :year AND ACCPERIOD = :period\n  AND BILLCLASS = 'AR'  -- TODO #ARAP-1: 应收类枚举,默认 'AR'\n  AND NVL(DR, 0) = 0;","rule_id":"Rule_PRE_CUST_08"},"PRE-SUP-01":{"id":"PRE-SUP-01","name":"活跃供应商数","topic":"供应商结构","scenario":"贷前","formula":"近12月有业务的供应商数","biz_desc":"近12个月有应付业务往来的活跃供应商数","fibo":[{"zh":"交易对手 (Counterparty)","uri":"fibo-fbc-pas-fpas:Counterparty"}],"class_name":"ActiveSupplierCount","tables":[{"code":"AP_PAYABLEITEM","zh":"应付单明细表"}],"fields":[{"tbl_code":"AP_PAYABLEITEM","tbl_zh":"应付单明细表","items":[{"code":"BILLDATE","zh":"日期"},{"code":"PK_ORG","zh":"组织"},{"code":"SUPPLIER","zh":"供应商主键"}]}],"accounts":[],"sql":"-- PRE-SUP-01 活跃供应商数 = 近 12 个月有应付业务的 DISTINCT 供应商数\nSELECT COUNT(DISTINCT SUPPLIER) AS active_supplier_count\nFROM AP_PAYABLEITEM\nWHERE PK_ORG = :org_id\n  AND BILLDATE >= TO_CHAR(ADD_MONTHS(TO_DATE(:asof_date,'YYYY-MM-DD'), -12), 'YYYY-MM-DD HH24:MI:SS')\n  AND BILLDATE <= :asof_date||' 23:59:59';","rule_id":"Rule_PRE_SUP_01"},"PRE-SUP-02":{"id":"PRE-SUP-02","name":"累计供应商数","topic":"供应商结构","scenario":"贷前","formula":"COUNT(供应商档案)","biz_desc":"档案库中启用状态的供应商总数","fibo":[{"zh":"交易对手 (Counterparty)","uri":"fibo-fbc-pas-fpas:Counterparty"}],"class_name":"TotalSupplierCount","tables":[{"code":"BD_SUPPLIER","zh":"供应商基础档案"}],"fields":[{"tbl_code":"BD_SUPPLIER","tbl_zh":"供应商基础档案","items":[{"code":"ENABLESTATE","zh":"启用状态"},{"code":"PK_ORG","zh":"所属组织"}]}],"accounts":[],"sql":"-- PRE-SUP-02 累计供应商数\nSELECT COUNT(*) AS total_supplier_count\nFROM BD_SUPPLIER\nWHERE PK_ORG = :org_id\n  AND ENABLESTATE = 2\n  AND NVL(DR, 0) = 0;","rule_id":"Rule_PRE_SUP_02"},"PRE-SUP-03":{"id":"PRE-SUP-03","name":"供应商黑名单数","topic":"供应商结构","scenario":"贷前","formula":"COUNT where BLACKLIST=Y","biz_desc":"进入黑名单的供应商数量","fibo":[{"zh":"交易对手 (Counterparty)","uri":"fibo-fbc-pas-fpas:Counterparty"}],"class_name":"BlacklistSupplierCount","tables":[{"code":"BD_SUPPLIER","zh":"供应商基础档案"}],"fields":[{"tbl_code":"BD_SUPPLIER","tbl_zh":"供应商基础档案","items":[{"code":"BLACKLIST","zh":"黑名单标志"},{"code":"PK_ORG","zh":"所属组织"}]}],"accounts":[],"sql":"-- PRE-SUP-03 供应商黑名单数\nSELECT COUNT(*) AS blacklist_supplier_count\nFROM BD_SUPPLIER\nWHERE PK_ORG = :org_id\n  AND BLACKLIST = 'Y'\n  AND NVL(DR, 0) = 0;","rule_id":"Rule_PRE_SUP_03"},"PRE-SUP-04":{"id":"PRE-SUP-04","name":"期间采购总额","topic":"供应商结构","scenario":"贷前","formula":"SUM(采购发票金额)","biz_desc":"报告期内采购发票金额合计","fibo":[{"zh":"货币金额 (MonetaryAmount)","uri":"fibo-fnd-acc-cur:MonetaryAmount"}],"class_name":"PeriodPurchaseAmount","tables":[{"code":"PO_INVOICE","zh":"采购发票表"}],"fields":[{"tbl_code":"PO_INVOICE","tbl_zh":"采购发票表","items":[{"code":"DBILLDATE","zh":"单据日期"},{"code":"NTOTALORIGMNY","zh":"总原币金额"},{"code":"PK_ORG","zh":"组织"}]}],"accounts":[],"sql":"-- PRE-SUP-04 期间采购总额 = SUM(采购发票原币金额)\nSELECT NVL(SUM(NTOTALORIGMNY), 0) AS period_purchase_amount\nFROM PO_INVOICE\nWHERE PK_ORG = :org_id\n  AND DBILLDATE BETWEEN :start_date AND :asof_date\n  AND NVL(DR, 0) = 0;","rule_id":"Rule_PRE_SUP_04"},"PRE-SUP-05":{"id":"PRE-SUP-05","name":"期间采购笔数","topic":"供应商结构","scenario":"贷前","formula":"COUNT(采购发票)","biz_desc":"报告期内收到的采购发票总笔数","fibo":[],"class_name":"PurchaseInvoiceCount","tables":[{"code":"PO_INVOICE","zh":"采购发票表"}],"fields":[{"tbl_code":"PO_INVOICE","tbl_zh":"采购发票表","items":[{"code":"DBILLDATE","zh":"单据日期"},{"code":"PK_ORG","zh":"组织"}]}],"accounts":[],"sql":"-- PRE-SUP-05 期间采购笔数\nSELECT COUNT(*) AS purchase_invoice_count\nFROM PO_INVOICE\nWHERE PK_ORG = :org_id\n  AND DBILLDATE BETWEEN :start_date AND :asof_date\n  AND NVL(DR, 0) = 0;","rule_id":"Rule_PRE_SUP_05"},"PRE-SUP-06":{"id":"PRE-SUP-06","name":"采购平均单笔金额","topic":"供应商结构","scenario":"贷前","formula":"采购总额/笔数","biz_desc":"平均每笔采购发票的金额","fibo":[{"zh":"货币金额 (MonetaryAmount)","uri":"fibo-fnd-acc-cur:MonetaryAmount"}],"class_name":"AvgPurchaseAmount","tables":[{"code":"PO_INVOICE","zh":"采购发票表"}],"fields":[{"tbl_code":"PO_INVOICE","tbl_zh":"采购发票表","items":[{"code":"DBILLDATE","zh":"单据日期"},{"code":"NTOTALORIGMNY","zh":"总原币金额"},{"code":"PK_ORG","zh":"组织"}]}],"accounts":[],"sql":"-- PRE-SUP-06 采购平均单笔金额\nSELECT ROUND(NVL(SUM(NTOTALORIGMNY), 0) / NULLIF(COUNT(*), 0), 2) AS avg_purchase_amount\nFROM PO_INVOICE\nWHERE PK_ORG = :org_id\n  AND DBILLDATE BETWEEN :start_date AND :asof_date\n  AND NVL(DR, 0) = 0;","rule_id":"Rule_PRE_SUP_06"},"PRE-CT-01":{"id":"PRE-CT-01","name":"在手销售合同数","topic":"合同","scenario":"贷前","formula":"COUNT(执行中销售合同)","biz_desc":"执行中的销售合同总数","fibo":[{"zh":"合同 (Contract)","uri":"fibo-fnd-agr-ctr:Contract"}],"class_name":"ActiveSalesContractCount","tables":[{"code":"CT_SALE","zh":"销售合同主表"}],"fields":[{"tbl_code":"CT_SALE","tbl_zh":"销售合同主表","items":[{"code":"ACTUALINVALIDATE","zh":"实际失效日期"},{"code":"FSTATUSFLAG","zh":"合同状态"},{"code":"PK_ORG","zh":"组织"}]}],"accounts":[],"sql":"-- PRE-CT-01 在手销售合同数 = COUNT(执行中销售合同)\nSELECT COUNT(*) AS active_sales_contract_count\nFROM CT_SALE\nWHERE PK_ORG = :org_id\n  AND FSTATUSFLAG IN (2, 3)  -- TODO #CT-1: 执行中状态枚举,默认 2=审批通过/3=执行中\n  AND NVL(DR, 0) = 0\n  AND (ACTUALINVALIDATE IS NULL OR ACTUALINVALIDATE > :asof_date);","rule_id":"Rule_PRE_CT_01"},"PRE-CT-02":{"id":"PRE-CT-02","name":"在手销售合同金额","topic":"合同","scenario":"贷前","formula":"SUM(合同金额)","biz_desc":"执行中的销售合同金额合计(在手订单)","fibo":[{"zh":"合同 (Contract)","uri":"fibo-fnd-agr-ctr:Contract"},{"zh":"货币金额 (MonetaryAmount)","uri":"fibo-fnd-acc-cur:MonetaryAmount"}],"class_name":"ActiveSalesContractAmount","tables":[{"code":"CT_SALE","zh":"销售合同主表"}],"fields":[{"tbl_code":"CT_SALE","tbl_zh":"销售合同主表","items":[{"code":"ACTUALINVALIDATE","zh":"实际失效日期"},{"code":"FSTATUSFLAG","zh":"合同状态"},{"code":"NTOTALORIGMNY","zh":"合同总金额"},{"code":"PK_ORG","zh":"组织"}]}],"accounts":[],"sql":"-- PRE-CT-02 在手销售合同金额\nSELECT NVL(SUM(NTOTALORIGMNY), 0) AS active_sales_contract_amount\nFROM CT_SALE\nWHERE PK_ORG = :org_id\n  AND FSTATUSFLAG IN (2, 3)\n  AND NVL(DR, 0) = 0\n  AND (ACTUALINVALIDATE IS NULL OR ACTUALINVALIDATE > :asof_date);","rule_id":"Rule_PRE_CT_02"},"PRE-CT-03":{"id":"PRE-CT-03","name":"在手采购合同数","topic":"合同","scenario":"贷前","formula":"COUNT(执行中采购合同)","biz_desc":"执行中的采购合同总数","fibo":[{"zh":"合同 (Contract)","uri":"fibo-fnd-agr-ctr:Contract"}],"class_name":"ActivePurchaseContractCount","tables":[{"code":"CT_PU","zh":"采购合同主表"}],"fields":[{"tbl_code":"CT_PU","tbl_zh":"采购合同主表","items":[{"code":"ACTUALINVALIDATE","zh":"实际失效日期"},{"code":"FSTATUSFLAG","zh":"合同状态"},{"code":"PK_ORG","zh":"组织"}]}],"accounts":[],"sql":"-- PRE-CT-03 在手采购合同数\nSELECT COUNT(*) AS active_purchase_contract_count\nFROM CT_PU\nWHERE PK_ORG = :org_id\n  AND FSTATUSFLAG IN (2, 3)\n  AND NVL(DR, 0) = 0\n  AND (ACTUALINVALIDATE IS NULL OR ACTUALINVALIDATE > :asof_date);","rule_id":"Rule_PRE_CT_03"},"PRE-CT-04":{"id":"PRE-CT-04","name":"在手采购合同金额","topic":"合同","scenario":"贷前","formula":"SUM(合同金额)","biz_desc":"执行中的采购合同金额合计","fibo":[{"zh":"合同 (Contract)","uri":"fibo-fnd-agr-ctr:Contract"},{"zh":"货币金额 (MonetaryAmount)","uri":"fibo-fnd-acc-cur:MonetaryAmount"}],"class_name":"ActivePurchaseContractAmount","tables":[{"code":"CT_PU","zh":"采购合同主表"}],"fields":[{"tbl_code":"CT_PU","tbl_zh":"采购合同主表","items":[{"code":"ACTUALINVALIDATE","zh":"实际失效日期"},{"code":"FSTATUSFLAG","zh":"合同状态"},{"code":"NTOTALORIGMNY","zh":"合同总金额"},{"code":"PK_ORG","zh":"组织"}]}],"accounts":[],"sql":"-- PRE-CT-04 在手采购合同金额\nSELECT NVL(SUM(NTOTALORIGMNY), 0) AS active_purchase_contract_amount\nFROM CT_PU\nWHERE PK_ORG = :org_id\n  AND FSTATUSFLAG IN (2, 3)\n  AND NVL(DR, 0) = 0\n  AND (ACTUALINVALIDATE IS NULL OR ACTUALINVALIDATE > :asof_date);","rule_id":"Rule_PRE_CT_04"},"PRE-CT-05":{"id":"PRE-CT-05","name":"销售合同平均金额","topic":"合同","scenario":"贷前","formula":"合同金额/合同数","biz_desc":"平均每份销售合同的金额","fibo":[{"zh":"合同 (Contract)","uri":"fibo-fnd-agr-ctr:Contract"},{"zh":"货币金额 (MonetaryAmount)","uri":"fibo-fnd-acc-cur:MonetaryAmount"}],"class_name":"AvgSalesContractAmount","tables":[{"code":"CT_SALE","zh":"销售合同主表"}],"fields":[{"tbl_code":"CT_SALE","tbl_zh":"销售合同主表","items":[{"code":"ACTUALINVALIDATE","zh":"实际失效日期"},{"code":"FSTATUSFLAG","zh":"合同状态"},{"code":"NTOTALORIGMNY","zh":"合同总金额"},{"code":"PK_ORG","zh":"组织"}]}],"accounts":[],"sql":"-- PRE-CT-05 销售合同平均金额\nSELECT ROUND(NVL(SUM(NTOTALORIGMNY), 0) / NULLIF(COUNT(*), 0), 2) AS avg_sales_contract_amount\nFROM CT_SALE\nWHERE PK_ORG = :org_id\n  AND FSTATUSFLAG IN (2, 3)\n  AND NVL(DR, 0) = 0\n  AND (ACTUALINVALIDATE IS NULL OR ACTUALINVALIDATE > :asof_date);","rule_id":"Rule_PRE_CT_05"},"PRE-CT-06":{"id":"PRE-CT-06","name":"采购合同平均金额","topic":"合同","scenario":"贷前","formula":"合同金额/合同数","biz_desc":"平均每份采购合同的金额","fibo":[{"zh":"合同 (Contract)","uri":"fibo-fnd-agr-ctr:Contract"},{"zh":"货币金额 (MonetaryAmount)","uri":"fibo-fnd-acc-cur:MonetaryAmount"}],"class_name":"AvgPurchaseContractAmount","tables":[{"code":"CT_PU","zh":"采购合同主表"}],"fields":[{"tbl_code":"CT_PU","tbl_zh":"采购合同主表","items":[{"code":"ACTUALINVALIDATE","zh":"实际失效日期"},{"code":"FSTATUSFLAG","zh":"合同状态"},{"code":"NTOTALORIGMNY","zh":"合同总金额"},{"code":"PK_ORG","zh":"组织"}]}],"accounts":[],"sql":"-- PRE-CT-06 采购合同平均金额\nSELECT ROUND(NVL(SUM(NTOTALORIGMNY), 0) / NULLIF(COUNT(*), 0), 2) AS avg_purchase_contract_amount\nFROM CT_PU\nWHERE PK_ORG = :org_id\n  AND FSTATUSFLAG IN (2, 3)\n  AND NVL(DR, 0) = 0\n  AND (ACTUALINVALIDATE IS NULL OR ACTUALINVALIDATE > :asof_date);","rule_id":"Rule_PRE_CT_06"},"PRE-LOAN-01":{"id":"PRE-LOAN-01","name":"历史融资次数","topic":"融资历史","scenario":"贷前","formula":"COUNT(融资合同)","biz_desc":"企业历史上签订过的融资合同总数","fibo":[{"zh":"债务工具 (DebtInstrument)","uri":"fibo-fbc-dae-dbt:DebtInstrument"}],"class_name":"LoanHistoryCount","tables":[{"code":"CDMC_CONTRACT","zh":"融资合同主表"}],"fields":[{"tbl_code":"CDMC_CONTRACT","tbl_zh":"融资合同主表","items":[{"code":"BEGINDATE","zh":"起始日期"},{"code":"PK_ORG","zh":"组织"}]}],"accounts":[],"sql":"-- PRE-LOAN-01 历史融资次数 = COUNT(融资合同)\nSELECT COUNT(*) AS loan_history_count\nFROM CDMC_CONTRACT\nWHERE PK_ORG = :org_id\n  AND NVL(DR, 0) = 0\n  AND BEGINDATE <= :asof_date;","rule_id":"Rule_PRE_LOAN_01"},"PRE-LOAN-02":{"id":"PRE-LOAN-02","name":"当前融资余额","topic":"融资历史","scenario":"贷前","formula":"SUM(剩余本金)","biz_desc":"当前仍在偿还中的融资余额","fibo":[{"zh":"货币金额 (MonetaryAmount)","uri":"fibo-fnd-acc-cur:MonetaryAmount"},{"zh":"债务 (Debt)","uri":"fibo-fbc-dae-dbt:Debt"}],"class_name":"CurrentLoanBalance","tables":[{"code":"CDMC_CONTRACT","zh":"融资合同主表"}],"fields":[{"tbl_code":"CDMC_CONTRACT","tbl_zh":"融资合同主表","items":[{"code":"AVAILABLEMNY","zh":"可用金额(授信额度)"},{"code":"BEGINDATE","zh":"起始日期"},{"code":"BUSISTATUS","zh":"业务状态"},{"code":"CCMNY","zh":"合同信用金额"},{"code":"ENDDATE","zh":"到期日期"},{"code":"PK_ORG","zh":"组织"}]}],"accounts":[],"sql":"-- PRE-LOAN-02 当前融资余额 = SUM(CCMNY-AVAILABLEMNY) 即已使用额度\n-- TODO #LOAN-1: CCMNY=信用金额,AVAILABLEMNY=可用额度,差值=已用。业务方确认口径\nSELECT NVL(SUM(CCMNY - AVAILABLEMNY), 0) AS current_loan_balance\nFROM CDMC_CONTRACT\nWHERE PK_ORG = :org_id\n  AND NVL(DR, 0) = 0\n  AND BUSISTATUS IN (1, 2)  -- TODO #LOAN-2: 有效合同状态\n  AND BEGINDATE <= :asof_date\n  AND (ENDDATE IS NULL OR ENDDATE >= :asof_date);","rule_id":"Rule_PRE_LOAN_02"},"PRE-LOAN-03":{"id":"PRE-LOAN-03","name":"最大单笔融资金额","topic":"融资历史","scenario":"贷前","formula":"MAX(合同金额)","biz_desc":"历史上单笔最大的融资金额","fibo":[{"zh":"货币金额 (MonetaryAmount)","uri":"fibo-fnd-acc-cur:MonetaryAmount"},{"zh":"债务 (Debt)","uri":"fibo-fbc-dae-dbt:Debt"}],"class_name":"MaxSingleLoanAmount","tables":[{"code":"CDMC_CONTRACT","zh":"融资合同主表"}],"fields":[{"tbl_code":"CDMC_CONTRACT","tbl_zh":"融资合同主表","items":[{"code":"BEGINDATE","zh":"起始日期"},{"code":"CCMNY","zh":"合同信用金额"},{"code":"PK_ORG","zh":"组织"}]}],"accounts":[],"sql":"-- PRE-LOAN-03 最大单笔融资金额\nSELECT NVL(MAX(CCMNY), 0) AS max_single_loan_amount\nFROM CDMC_CONTRACT\nWHERE PK_ORG = :org_id\n  AND NVL(DR, 0) = 0\n  AND BEGINDATE <= :asof_date;","rule_id":"Rule_PRE_LOAN_03"},"PRE-LOAN-04":{"id":"PRE-LOAN-04","name":"债券融资总额","topic":"融资历史","scenario":"贷前","formula":"SUM(债券登记金额)","biz_desc":"发行债券累计融资金额","fibo":[{"zh":"货币金额 (MonetaryAmount)","uri":"fibo-fnd-acc-cur:MonetaryAmount"},{"zh":"债务工具 (DebtInstrument)","uri":"fibo-fbc-dae-dbt:DebtInstrument"}],"class_name":"BondIssueTotal","tables":[{"code":"BOND_CONTRACT","zh":"债券合同表"}],"fields":[{"tbl_code":"BOND_CONTRACT","tbl_zh":"债券合同表","items":[{"code":"ISSUESTARTDATE","zh":"发行开始日期"},{"code":"PK_ORG","zh":"发行组织"},{"code":"REGISTMNY","zh":"债券发行金额"}]}],"accounts":[],"sql":"-- PRE-LOAN-04 债券融资总额\nSELECT NVL(SUM(REGISTMNY), 0) AS bond_issue_total\nFROM BOND_CONTRACT\nWHERE PK_ORG = :org_id\n  AND NVL(DR, 0) = 0\n  AND ISSUESTARTDATE <= :asof_date;","rule_id":"Rule_PRE_LOAN_04"},"PRE-LOAN-05":{"id":"PRE-LOAN-05","name":"融资台账余额","topic":"融资历史","scenario":"贷前","formula":"SUM(台账余额)","biz_desc":"融资台账中的融资余额","fibo":[{"zh":"货币金额 (MonetaryAmount)","uri":"fibo-fnd-acc-cur:MonetaryAmount"},{"zh":"债务 (Debt)","uri":"fibo-fbc-dae-dbt:Debt"}],"class_name":"FinancingLedgerBalance","tables":[{"code":"BATM_FINANCING","zh":"融资台账表"}],"fields":[{"tbl_code":"BATM_FINANCING","tbl_zh":"融资台账表","items":[{"code":"BALANCE","zh":"原币余额"},{"code":"BEGINDATE","zh":"起始日期"},{"code":"ENDDATE","zh":"到期日期"},{"code":"PK_ORG","zh":"组织"}]}],"accounts":[],"sql":"-- PRE-LOAN-05 融资台账余额\nSELECT NVL(SUM(BALANCE), 0) AS financing_ledger_balance\nFROM BATM_FINANCING\nWHERE PK_ORG = :org_id\n  AND NVL(DR, 0) = 0\n  AND BEGINDATE <= :asof_date\n  AND (ENDDATE IS NULL OR ENDDATE >= :asof_date);","rule_id":"Rule_PRE_LOAN_05"},"PRE-GUA-01":{"id":"PRE-GUA-01","name":"对外担保合同数","topic":"担保质押","scenario":"贷前","formula":"COUNT(担保合同)","biz_desc":"企业对外签订的担保合同总数","fibo":[{"zh":"合同 (Contract)","uri":"fibo-fnd-agr-ctr:Contract"}],"class_name":"GuaranteeContractCount","tables":[{"code":"GPMC_GUACONTRACT","zh":"担保合同主表"}],"fields":[{"tbl_code":"GPMC_GUACONTRACT","tbl_zh":"担保合同主表","items":[{"code":"BUSISTATUS","zh":"业务状态"},{"code":"PK_ORG","zh":"组织"}]}],"accounts":[],"sql":"-- PRE-GUA-01 对外担保合同数\nSELECT COUNT(*) AS guarantee_contract_count\nFROM GPMC_GUACONTRACT\nWHERE PK_ORG = :org_id\n  AND NVL(DR, 0) = 0\n  AND BUSISTATUS IN (1, 2);  -- TODO #GUA-1: 担保有效状态枚举","rule_id":"Rule_PRE_GUA_01"},"PRE-GUA-02":{"id":"PRE-GUA-02","name":"对外担保总额","topic":"担保质押","scenario":"贷前","formula":"SUM(担保金额)","biz_desc":"对外担保合同金额合计","fibo":[{"zh":"货币金额 (MonetaryAmount)","uri":"fibo-fnd-acc-cur:MonetaryAmount"}],"class_name":"GuaranteeTotalAmount","tables":[{"code":"GPMC_GUACONTRACT","zh":"担保合同主表"}],"fields":[{"tbl_code":"GPMC_GUACONTRACT","tbl_zh":"担保合同主表","items":[{"code":"BUSISTATUS","zh":"业务状态"},{"code":"GUAAMOUNT","zh":"担保总金额"},{"code":"PK_ORG","zh":"组织"}]}],"accounts":[],"sql":"-- PRE-GUA-02 对外担保总额\nSELECT NVL(SUM(GUAAMOUNT), 0) AS guarantee_total_amount\nFROM GPMC_GUACONTRACT\nWHERE PK_ORG = :org_id\n  AND NVL(DR, 0) = 0\n  AND BUSISTATUS IN (1, 2);","rule_id":"Rule_PRE_GUA_02"},"PRE-GUA-03":{"id":"PRE-GUA-03","name":"担保债务总额","topic":"担保质押","scenario":"贷前","formula":"SUM(被担保债务金额)","biz_desc":"担保所涉及的被担保债务金额","fibo":[{"zh":"货币金额 (MonetaryAmount)","uri":"fibo-fnd-acc-cur:MonetaryAmount"},{"zh":"债务 (Debt)","uri":"fibo-fbc-dae-dbt:Debt"}],"class_name":"GuaranteedDebtAmount","tables":[{"code":"GPMC_GUACONTRACT","zh":"担保合同主表"}],"fields":[{"tbl_code":"GPMC_GUACONTRACT","tbl_zh":"担保合同主表","items":[{"code":"BUSISTATUS","zh":"业务状态"},{"code":"DEBTAMOUNT","zh":"债权金额"},{"code":"PK_ORG","zh":"组织"}]}],"accounts":[],"sql":"-- PRE-GUA-03 担保债务总额\nSELECT NVL(SUM(DEBTAMOUNT), 0) AS guaranteed_debt_amount\nFROM GPMC_GUACONTRACT\nWHERE PK_ORG = :org_id\n  AND NVL(DR, 0) = 0\n  AND BUSISTATUS IN (1, 2);","rule_id":"Rule_PRE_GUA_03"},"PRE-GUA-04":{"id":"PRE-GUA-04","name":"未使用担保额度","topic":"担保质押","scenario":"贷前","formula":"SUM(可用担保额度)","biz_desc":"剩余可用的担保额度","fibo":[{"zh":"货币金额 (MonetaryAmount)","uri":"fibo-fnd-acc-cur:MonetaryAmount"}],"class_name":"UnusedGuaranteeQuota","tables":[{"code":"GPMC_GUACONTRACT","zh":"担保合同主表"}],"fields":[{"tbl_code":"GPMC_GUACONTRACT","tbl_zh":"担保合同主表","items":[{"code":"AVAAMOUNT","zh":"可用金额"},{"code":"BUSISTATUS","zh":"业务状态"},{"code":"PK_ORG","zh":"组织"}]}],"accounts":[],"sql":"-- PRE-GUA-04 未使用担保额度\nSELECT NVL(SUM(AVAAMOUNT), 0) AS unused_guarantee_quota\nFROM GPMC_GUACONTRACT\nWHERE PK_ORG = :org_id\n  AND NVL(DR, 0) = 0\n  AND BUSISTATUS IN (1, 2);","rule_id":"Rule_PRE_GUA_04"},"PRE-GUA-05":{"id":"PRE-GUA-05","name":"担保额度使用率","topic":"担保质押","scenario":"贷前","formula":"USEDAMOUNT/(AVAAMOUNT+USEDAMOUNT)","biz_desc":"担保额度使用率(已用 / 总额度)","fibo":[{"zh":"金融比率 (Ratio)","uri":"fibo-fnd-arr-rt:Ratio"}],"class_name":"GuaranteeUsageRatio","tables":[{"code":"GPMC_GUACONTRACT","zh":"担保合同主表"}],"fields":[{"tbl_code":"GPMC_GUACONTRACT","tbl_zh":"担保合同主表","items":[{"code":"AVAAMOUNT","zh":"可用金额"},{"code":"BUSISTATUS","zh":"业务状态"},{"code":"PK_ORG","zh":"组织"},{"code":"USEDAMOUNT","zh":"已用金额"}]}],"accounts":[],"sql":"-- PRE-GUA-05 担保额度使用率 = USEDAMOUNT / (AVAAMOUNT + USEDAMOUNT)\nSELECT ROUND(\n    NVL(SUM(USEDAMOUNT), 0) /\n    NULLIF(NVL(SUM(USEDAMOUNT), 0) + NVL(SUM(AVAAMOUNT), 0), 0), 4) AS guarantee_usage_ratio\nFROM GPMC_GUACONTRACT\nWHERE PK_ORG = :org_id\n  AND NVL(DR, 0) = 0\n  AND BUSISTATUS IN (1, 2);","rule_id":"Rule_PRE_GUA_05"},"PRE-GUA-06":{"id":"PRE-GUA-06","name":"质押物总数","topic":"担保质押","scenario":"贷前","formula":"COUNT(质押物)","biz_desc":"质押给他人的资产总数","fibo":[],"class_name":"PledgeAssetCount","tables":[{"code":"GPMC_GUAPLEINF","zh":"质押信息表"}],"fields":[{"tbl_code":"GPMC_GUAPLEINF","tbl_zh":"质押信息表","items":[{"code":"PK_ORG","zh":"组织"}]}],"accounts":[],"sql":"-- PRE-GUA-06 质押物总数\nSELECT COUNT(*) AS pledge_asset_count\nFROM GPMC_GUAPLEINF\nWHERE PK_ORG = :org_id\n  AND NVL(DR, 0) = 0;","rule_id":"Rule_PRE_GUA_06"},"PRE-GUA-07":{"id":"PRE-GUA-07","name":"质押物总价值","topic":"担保质押","scenario":"贷前","formula":"SUM(质押物总值)","biz_desc":"所有质押资产的评估总值","fibo":[{"zh":"货币金额 (MonetaryAmount)","uri":"fibo-fnd-acc-cur:MonetaryAmount"}],"class_name":"PledgeAssetTotalValue","tables":[{"code":"GPMC_GUAPLEINF","zh":"质押信息表"}],"fields":[{"tbl_code":"GPMC_GUAPLEINF","tbl_zh":"质押信息表","items":[{"code":"PK_ORG","zh":"组织"},{"code":"TOTALPLEDGE","zh":"质押总金额"}]}],"accounts":[],"sql":"-- PRE-GUA-07 质押物总价值\nSELECT NVL(SUM(TOTALPLEDGE), 0) AS pledge_asset_total_value\nFROM GPMC_GUAPLEINF\nWHERE PK_ORG = :org_id\n  AND NVL(DR, 0) = 0;","rule_id":"Rule_PRE_GUA_07"},"PRE-SCALE-01":{"id":"PRE-SCALE-01","name":"总资产规模","topic":"资产规模","scenario":"贷前","formula":"SUM(资产类科目净额)","biz_desc":"企业总资产规模","fibo":[{"zh":"货币金额 (MonetaryAmount)","uri":"fibo-fnd-acc-cur:MonetaryAmount"}],"class_name":"TotalAssets","tables":[{"code":"GL_BALANCE","zh":"总账余额表"}],"fields":[{"tbl_code":"GL_BALANCE","tbl_zh":"总账余额表","items":[{"code":"ACCOUNTCODE","zh":"会计科目编码(冗余)"},{"code":"LOCALCREDITAMOUNT","zh":"本币贷方发生额"},{"code":"LOCALDEBITAMOUNT","zh":"本币借方发生额"},{"code":"PERIOD","zh":"会计期间(月)"},{"code":"PK_ACCOUNTINGBOOK","zh":"账簿主键"},{"code":"PK_ORG","zh":"组织主键(外键→ORG_ORGS.PK_ORG)"}]}],"accounts":[{"code":"1","zh":"科目 1"},{"code":"1231","zh":"坏账准备"},{"code":"1407","zh":"商品进销差价"},{"code":"1471","zh":"存货跌价准备"},{"code":"1602","zh":"累计折旧"},{"code":"1702","zh":"累计摊销"}],"sql":"-- PRE-SCALE-01 总资产规模\n  WITH bal AS (\n    SELECT ACCOUNTCODE,\n           SUM(LOCALDEBITAMOUNT - LOCALCREDITAMOUNT) AS net_debit_bal,\n           SUM(LOCALCREDITAMOUNT - LOCALDEBITAMOUNT) AS net_credit_bal\n    FROM GL_BALANCE\n    WHERE PK_ORG = :org_id AND PK_ACCOUNTINGBOOK = :book_id\n      AND YEAR = :year AND PERIOD = :period\n    GROUP BY ACCOUNTCODE\n  )\n  SELECT (NVL((SELECT SUM(net_debit_bal) FROM bal WHERE ACCOUNTCODE LIKE '1%'), 0)\n - NVL((SELECT SUM(ABS(net_debit_bal)) FROM bal WHERE\n    ACCOUNTCODE LIKE '1231%' OR ACCOUNTCODE LIKE '1407%' OR ACCOUNTCODE LIKE '1471%'\n OR ACCOUNTCODE LIKE '1602%' OR ACCOUNTCODE LIKE '1702%'), 0)) AS total_assets FROM dual;","rule_id":"Rule_PRE_SCALE_01"},"PRE-SCALE-02":{"id":"PRE-SCALE-02","name":"所有者权益规模","topic":"资产规模","scenario":"贷前","formula":"SUM(权益类科目)","biz_desc":"所有者权益总额","fibo":[{"zh":"货币金额 (MonetaryAmount)","uri":"fibo-fnd-acc-cur:MonetaryAmount"}],"class_name":"OwnersEquity","tables":[{"code":"GL_BALANCE","zh":"总账余额表"}],"fields":[{"tbl_code":"GL_BALANCE","tbl_zh":"总账余额表","items":[{"code":"ACCOUNTCODE","zh":"会计科目编码(冗余)"},{"code":"LOCALCREDITAMOUNT","zh":"本币贷方发生额"},{"code":"LOCALDEBITAMOUNT","zh":"本币借方发生额"},{"code":"PERIOD","zh":"会计期间(月)"},{"code":"PK_ACCOUNTINGBOOK","zh":"账簿主键"},{"code":"PK_ORG","zh":"组织主键(外键→ORG_ORGS.PK_ORG)"}]}],"accounts":[{"code":"4001","zh":"实收资本"},{"code":"4002","zh":"资本公积"},{"code":"4101","zh":"盈余公积"},{"code":"4104","zh":"利润分配"},{"code":"4201","zh":"库存股"}],"sql":"-- PRE-SCALE-02 所有者权益规模\n  WITH bal AS (\n    SELECT ACCOUNTCODE,\n           SUM(LOCALDEBITAMOUNT - LOCALCREDITAMOUNT) AS net_debit_bal,\n           SUM(LOCALCREDITAMOUNT - LOCALDEBITAMOUNT) AS net_credit_bal\n    FROM GL_BALANCE\n    WHERE PK_ORG = :org_id AND PK_ACCOUNTINGBOOK = :book_id\n      AND YEAR = :year AND PERIOD = :period\n    GROUP BY ACCOUNTCODE\n  )\n  SELECT (NVL((SELECT SUM(net_credit_bal) FROM bal WHERE\n    ACCOUNTCODE LIKE '4001%' OR ACCOUNTCODE LIKE '4002%'\n OR ACCOUNTCODE LIKE '4101%' OR ACCOUNTCODE LIKE '4104%'), 0)\n - NVL((SELECT SUM(net_debit_bal) FROM bal WHERE ACCOUNTCODE LIKE '4201%'), 0)) AS owners_equity FROM dual;","rule_id":"Rule_PRE_SCALE_02"},"PRE-SCALE-03":{"id":"PRE-SCALE-03","name":"注册资本","topic":"资产规模","scenario":"贷前","formula":"SUM(实收资本)","biz_desc":"实收资本(注册资本)","fibo":[{"zh":"货币金额 (MonetaryAmount)","uri":"fibo-fnd-acc-cur:MonetaryAmount"}],"class_name":"PaidInCapital","tables":[{"code":"GL_BALANCE","zh":"总账余额表"}],"fields":[{"tbl_code":"GL_BALANCE","tbl_zh":"总账余额表","items":[{"code":"ACCOUNTCODE","zh":"会计科目编码(冗余)"},{"code":"LOCALCREDITAMOUNT","zh":"本币贷方发生额"},{"code":"LOCALDEBITAMOUNT","zh":"本币借方发生额"},{"code":"PERIOD","zh":"会计期间(月)"},{"code":"PK_ACCOUNTINGBOOK","zh":"账簿主键"},{"code":"PK_ORG","zh":"组织主键(外键→ORG_ORGS.PK_ORG)"}]}],"accounts":[{"code":"4001","zh":"实收资本"}],"sql":"-- PRE-SCALE-03 注册资本(实收资本 4001 贷方余额)\n  WITH bal AS (\n    SELECT ACCOUNTCODE,\n           SUM(LOCALDEBITAMOUNT - LOCALCREDITAMOUNT) AS net_debit_bal,\n           SUM(LOCALCREDITAMOUNT - LOCALDEBITAMOUNT) AS net_credit_bal\n    FROM GL_BALANCE\n    WHERE PK_ORG = :org_id AND PK_ACCOUNTINGBOOK = :book_id\n      AND YEAR = :year AND PERIOD = :period\n    GROUP BY ACCOUNTCODE\n  )\n  SELECT NVL((SELECT SUM(net_credit_bal) FROM bal WHERE ACCOUNTCODE LIKE '4001%'), 0)\n    AS paid_in_capital FROM dual;","rule_id":"Rule_PRE_SCALE_03"},"PRE-SCALE-04":{"id":"PRE-SCALE-04","name":"期末存货规模","topic":"资产规模","scenario":"贷前","formula":"SUM(存货余额)","biz_desc":"期末存货账面余额","fibo":[{"zh":"货币金额 (MonetaryAmount)","uri":"fibo-fnd-acc-cur:MonetaryAmount"}],"class_name":"InventoryAmount","tables":[{"code":"IA_MONTHNAB","zh":"存货月末余额表"}],"fields":[{"tbl_code":"IA_MONTHNAB","tbl_zh":"存货月末余额表","items":[{"code":"CACCOUNTPERIOD","zh":"会计期间(YYYY-MM)"},{"code":"NABMNY","zh":"月末原币金额"},{"code":"PK_ORG","zh":"组织"}]}],"accounts":[],"sql":"-- PRE-SCALE-04 期末存货规模(IA_MONTHNAB 月末余额表)\nSELECT NVL(SUM(NABMNY), 0) AS inventory_amount\nFROM IA_MONTHNAB\nWHERE PK_ORG = :org_id\n  AND CACCOUNTPERIOD = :year||LPAD(:period, 2, '0')  -- YYYYMM 拼接\n  AND NVL(DR, 0) = 0;","rule_id":"Rule_PRE_SCALE_04"},"POST-AR-03":{"id":"POST-AR-03","name":"坏账发生额","topic":"应收应付","scenario":"贷后","formula":"SUM(坏账损失金额)","biz_desc":"报告期内发生的坏账损失金额","fibo":[{"zh":"货币金额 (MonetaryAmount)","uri":"fibo-fnd-acc-cur:MonetaryAmount"}],"class_name":"BadDebtLossAmount","tables":[{"code":"ARAP_BDLOSS","zh":"坏账损失主表"}],"fields":[{"tbl_code":"ARAP_BDLOSS","tbl_zh":"坏账损失主表","items":[{"code":"APPROVESTATUS","zh":"审批状态"},{"code":"BILLDATE","zh":"单据日期"},{"code":"LOSSLOCALMONEY","zh":"本币损失金额"},{"code":"PK_ORG","zh":"组织"}]}],"accounts":[],"sql":"-- POST-AR-03 坏账发生额 = SUM(本期坏账本币金额)\nSELECT NVL(SUM(LOSSLOCALMONEY), 0) AS bad_debt_loss_amount\nFROM ARAP_BDLOSS\nWHERE PK_ORG = :org_id\n  AND BILLDATE BETWEEN :start_date AND :asof_date\n  AND NVL(DR, 0) = 0\n  AND APPROVESTATUS = 1;  -- TODO #BDL-1: 已审批坏账,默认 1=通过","rule_id":"Rule_POST_AR_03"},"POST-AR-04":{"id":"POST-AR-04","name":"坏账发生笔数","topic":"应收应付","scenario":"贷后","formula":"COUNT(坏账单据)","biz_desc":"报告期内发生的坏账单据数量","fibo":[],"class_name":"BadDebtLossCount","tables":[{"code":"ARAP_BDLOSS","zh":"坏账损失主表"}],"fields":[{"tbl_code":"ARAP_BDLOSS","tbl_zh":"坏账损失主表","items":[{"code":"APPROVESTATUS","zh":"审批状态"},{"code":"BILLDATE","zh":"单据日期"},{"code":"PK_ORG","zh":"组织"}]}],"accounts":[],"sql":"-- POST-AR-04 坏账发生笔数\nSELECT COUNT(*) AS bad_debt_loss_count\nFROM ARAP_BDLOSS\nWHERE PK_ORG = :org_id\n  AND BILLDATE BETWEEN :start_date AND :asof_date\n  AND NVL(DR, 0) = 0\n  AND APPROVESTATUS = 1;","rule_id":"Rule_POST_AR_04"},"POST-REP-01":{"id":"POST-REP-01","name":"本期计划还本金额","topic":"还款表现","scenario":"贷后","formula":"SUM(计划还本)","biz_desc":"本期计划归还的贷款本金金额","fibo":[{"zh":"货币金额 (MonetaryAmount)","uri":"fibo-fnd-acc-cur:MonetaryAmount"},{"zh":"付款义务 (PaymentObligation)","uri":"fibo-fnd-pas-psch:PaymentObligation"}],"class_name":"PlannedPrincipalRepayment","tables":[{"code":"CDMC_REPAYPRCPL","zh":"还本计划表"}],"fields":[{"tbl_code":"CDMC_REPAYPRCPL","tbl_zh":"还本计划表","items":[{"code":"PK_ORG","zh":"组织"},{"code":"REPAYDATE","zh":"还款日期"},{"code":"REPAYMNY","zh":"还本金额"}]}],"accounts":[],"sql":"-- POST-REP-01 本期计划还本金额 = SUM(REPAYMNY)\nSELECT NVL(SUM(REPAYMNY), 0) AS planned_principal_repayment\nFROM CDMC_REPAYPRCPL\nWHERE PK_ORG = :org_id\n  AND REPAYDATE BETWEEN :start_date AND :asof_date\n  AND NVL(DR, 0) = 0;","rule_id":"Rule_POST_REP_01"},"POST-REP-02":{"id":"POST-REP-02","name":"本期实际还本金额","topic":"还款表现","scenario":"贷后","formula":"SUM(实际还本)","biz_desc":"本期实际归还的贷款本金金额","fibo":[{"zh":"货币金额 (MonetaryAmount)","uri":"fibo-fnd-acc-cur:MonetaryAmount"},{"zh":"付款义务 (PaymentObligation)","uri":"fibo-fnd-pas-psch:PaymentObligation"}],"class_name":"ActualPrincipalRepayment","tables":[{"code":"CDMC_REPAYPRCPL","zh":"还本计划表"}],"fields":[{"tbl_code":"CDMC_REPAYPRCPL","tbl_zh":"还本计划表","items":[{"code":"EXREPAYMNY","zh":"实际还本金额"},{"code":"MAKEVDATE","zh":"生效日期"},{"code":"PK_ORG","zh":"组织"}]}],"accounts":[],"sql":"-- POST-REP-02 本期实际还本金额 = SUM(EXREPAYMNY)\nSELECT NVL(SUM(EXREPAYMNY), 0) AS actual_principal_repayment\nFROM CDMC_REPAYPRCPL\nWHERE PK_ORG = :org_id\n  AND MAKEVDATE BETWEEN :start_date AND :asof_date  -- MAKEVDATE=实际执行日\n  AND NVL(DR, 0) = 0;\n-- TODO #REP-1: MAKEVDATE 是否为实际还款日,需业务方确认","rule_id":"Rule_POST_REP_02"},"POST-REP-03":{"id":"POST-REP-03","name":"本期计划还息金额","topic":"还款表现","scenario":"贷后","formula":"SUM(计划还息)","biz_desc":"本期计划支付的贷款利息金额","fibo":[{"zh":"货币金额 (MonetaryAmount)","uri":"fibo-fnd-acc-cur:MonetaryAmount"},{"zh":"付款义务 (PaymentObligation)","uri":"fibo-fnd-pas-psch:PaymentObligation"}],"class_name":"PlannedInterestRepayment","tables":[{"code":"CDMC_REPINTEREST","zh":"还息计划表"}],"fields":[{"tbl_code":"CDMC_REPINTEREST","tbl_zh":"还息计划表","items":[{"code":"LOANDATE","zh":"放款日期"},{"code":"PAYINTMONEY","zh":"还息金额"},{"code":"PK_ORG","zh":"组织"}]}],"accounts":[],"sql":"-- POST-REP-03 本期计划还息金额 = SUM(PAYINTMONEY)\nSELECT NVL(SUM(PAYINTMONEY), 0) AS planned_interest_repayment\nFROM CDMC_REPINTEREST\nWHERE PK_ORG = :org_id\n  AND LOANDATE BETWEEN :start_date AND :asof_date\n  AND NVL(DR, 0) = 0;","rule_id":"Rule_POST_REP_03"},"POST-GUA-01":{"id":"POST-GUA-01","name":"新增担保合同数","topic":"担保变化","scenario":"贷后","formula":"COUNT where BILLMAKEDATE in 本期","biz_desc":"本期新增签订的担保合同数量","fibo":[{"zh":"合同 (Contract)","uri":"fibo-fnd-agr-ctr:Contract"}],"class_name":"NewGuaranteeContractCount","tables":[{"code":"GPMC_GUACONTRACT","zh":"担保合同主表"}],"fields":[{"tbl_code":"GPMC_GUACONTRACT","tbl_zh":"担保合同主表","items":[{"code":"BILLMAKEDATE","zh":"制单日期"},{"code":"PK_ORG","zh":"组织"}]}],"accounts":[],"sql":"-- POST-GUA-01 新增担保合同数(本期内制单)\nSELECT COUNT(*) AS new_guarantee_contract_count\nFROM GPMC_GUACONTRACT\nWHERE PK_ORG = :org_id\n  AND BILLMAKEDATE BETWEEN :start_date AND :asof_date\n  AND NVL(DR, 0) = 0;","rule_id":"Rule_POST_GUA_01"},"SCF-SCALE-01":{"id":"SCF-SCALE-01","name":"月均销售额","topic":"交易规模","scenario":"供应链","formula":"近12月销售总额/12","biz_desc":"近12个月月均销售额","fibo":[{"zh":"货币金额 (MonetaryAmount)","uri":"fibo-fnd-acc-cur:MonetaryAmount"}],"class_name":"MonthlyAvgSalesAmount","tables":[{"code":"SO_SALEINVOICE","zh":"销售发票主表"}],"fields":[{"tbl_code":"SO_SALEINVOICE","tbl_zh":"销售发票主表","items":[{"code":"DBILLDATE","zh":"单据日期"},{"code":"NTOTALORIGMNY","zh":"总原币金额"},{"code":"PK_ORG","zh":"组织"}]}],"accounts":[],"sql":"-- SCF-SCALE-01 月均销售额 = 近12月销售总额/12\nSELECT ROUND(NVL(SUM(NTOTALORIGMNY), 0) / 12, 2) AS monthly_avg_sales\nFROM SO_SALEINVOICE\nWHERE PK_ORG = :org_id\n  AND DBILLDATE >= TO_CHAR(ADD_MONTHS(TO_DATE(:asof_date,'YYYY-MM-DD'), -12), 'YYYY-MM-DD HH24:MI:SS')\n  AND DBILLDATE <= :asof_date||' 23:59:59'\n  AND NVL(DR, 0) = 0;","rule_id":"Rule_SCF_SCALE_01"},"SCF-SCALE-02":{"id":"SCF-SCALE-02","name":"月均采购额","topic":"交易规模","scenario":"供应链","formula":"近12月采购总额/12","biz_desc":"近12个月月均采购额","fibo":[{"zh":"货币金额 (MonetaryAmount)","uri":"fibo-fnd-acc-cur:MonetaryAmount"}],"class_name":"MonthlyAvgPurchaseAmount","tables":[{"code":"PO_INVOICE","zh":"采购发票表"}],"fields":[{"tbl_code":"PO_INVOICE","tbl_zh":"采购发票表","items":[{"code":"DBILLDATE","zh":"单据日期"},{"code":"NTOTALORIGMNY","zh":"总原币金额"},{"code":"PK_ORG","zh":"组织"}]}],"accounts":[],"sql":"-- SCF-SCALE-02 月均采购额 = 近12月采购总额/12\nSELECT ROUND(NVL(SUM(NTOTALORIGMNY), 0) / 12, 2) AS monthly_avg_purchase\nFROM PO_INVOICE\nWHERE PK_ORG = :org_id\n  AND DBILLDATE >= TO_CHAR(ADD_MONTHS(TO_DATE(:asof_date,'YYYY-MM-DD'), -12), 'YYYY-MM-DD HH24:MI:SS')\n  AND DBILLDATE <= :asof_date||' 23:59:59'\n  AND NVL(DR, 0) = 0;","rule_id":"Rule_SCF_SCALE_02"},"SCF-SCALE-03":{"id":"SCF-SCALE-03","name":"月均销售发票数","topic":"交易规模","scenario":"供应链","formula":"近12月发票数/12","biz_desc":"近12个月月均销售发票数","fibo":[],"class_name":"MonthlyAvgSalesInvoiceCount","tables":[{"code":"SO_SALEINVOICE","zh":"销售发票主表"}],"fields":[{"tbl_code":"SO_SALEINVOICE","tbl_zh":"销售发票主表","items":[{"code":"DBILLDATE","zh":"单据日期"},{"code":"PK_ORG","zh":"组织"}]}],"accounts":[],"sql":"-- SCF-SCALE-03 月均销售发票数\nSELECT ROUND(COUNT(*) / 12.0, 2) AS monthly_avg_sales_invoice_count\nFROM SO_SALEINVOICE\nWHERE PK_ORG = :org_id\n  AND DBILLDATE >= TO_CHAR(ADD_MONTHS(TO_DATE(:asof_date,'YYYY-MM-DD'), -12), 'YYYY-MM-DD HH24:MI:SS')\n  AND DBILLDATE <= :asof_date||' 23:59:59'\n  AND NVL(DR, 0) = 0;","rule_id":"Rule_SCF_SCALE_03"},"SCF-SCALE-04":{"id":"SCF-SCALE-04","name":"月均采购发票数","topic":"交易规模","scenario":"供应链","formula":"近12月发票数/12","biz_desc":"近12个月月均采购发票数","fibo":[],"class_name":"MonthlyAvgPurchaseInvoiceCount","tables":[{"code":"PO_INVOICE","zh":"采购发票表"}],"fields":[{"tbl_code":"PO_INVOICE","tbl_zh":"采购发票表","items":[{"code":"DBILLDATE","zh":"单据日期"},{"code":"PK_ORG","zh":"组织"}]}],"accounts":[],"sql":"-- SCF-SCALE-04 月均采购发票数\nSELECT ROUND(COUNT(*) / 12.0, 2) AS monthly_avg_purchase_invoice_count\nFROM PO_INVOICE\nWHERE PK_ORG = :org_id\n  AND DBILLDATE >= TO_CHAR(ADD_MONTHS(TO_DATE(:asof_date,'YYYY-MM-DD'), -12), 'YYYY-MM-DD HH24:MI:SS')\n  AND DBILLDATE <= :asof_date||' 23:59:59'\n  AND NVL(DR, 0) = 0;","rule_id":"Rule_SCF_SCALE_04"},"SCF-SCALE-05":{"id":"SCF-SCALE-05","name":"月均订单金额","topic":"交易规模","scenario":"供应链","formula":"近12月订单金额/12","biz_desc":"近12个月月均采购订单金额","fibo":[{"zh":"货币金额 (MonetaryAmount)","uri":"fibo-fnd-acc-cur:MonetaryAmount"}],"class_name":"MonthlyAvgPOAmount","tables":[{"code":"PO_ORDER","zh":"采购订单主表"}],"fields":[{"tbl_code":"PO_ORDER","tbl_zh":"采购订单主表","items":[{"code":"DBILLDATE","zh":"单据日期"},{"code":"NTOTALORIGMNY","zh":"订单总原币金额"},{"code":"PK_ORG","zh":"采购组织"}]}],"accounts":[],"sql":"-- SCF-SCALE-05 月均采购订单金额\nSELECT ROUND(NVL(SUM(NTOTALORIGMNY), 0) / 12, 2) AS monthly_avg_po_amount\nFROM PO_ORDER\nWHERE PK_ORG = :org_id\n  AND DBILLDATE >= TO_CHAR(ADD_MONTHS(TO_DATE(:asof_date,'YYYY-MM-DD'), -12), 'YYYY-MM-DD HH24:MI:SS')\n  AND DBILLDATE <= :asof_date||' 23:59:59'\n  AND NVL(DR, 0) = 0;","rule_id":"Rule_SCF_SCALE_05"},"SCF-UP-01":{"id":"SCF-UP-01","name":"应付账款总额","topic":"上游供应商","scenario":"供应链","formula":"SUM(应付余额)","biz_desc":"当前应付账款余额合计","fibo":[{"zh":"货币金额 (MonetaryAmount)","uri":"fibo-fnd-acc-cur:MonetaryAmount"},{"zh":"债务 (Debt)","uri":"fibo-fbc-dae-dbt:Debt"}],"class_name":"TotalPayable","tables":[{"code":"ARAP_BALANCE","zh":"往来余额表"}],"fields":[{"tbl_code":"ARAP_BALANCE","tbl_zh":"往来余额表","items":[{"code":"ACCPERIOD","zh":"会计期间"},{"code":"ACCYEAR","zh":"会计年度"},{"code":"BILLCLASS","zh":"单据类别(AR/AP)"},{"code":"LOCAL_MONEY_CR","zh":"本币贷方"},{"code":"LOCAL_MONEY_DE","zh":"本币借方"},{"code":"PK_ORG","zh":"组织"}]}],"accounts":[],"sql":"-- SCF-UP-01 应付账款总额\nSELECT NVL(SUM(LOCAL_MONEY_CR - LOCAL_MONEY_DE), 0) AS total_payable\nFROM ARAP_BALANCE\nWHERE PK_ORG = :org_id\n  AND ACCYEAR = :year AND ACCPERIOD = :period\n  AND BILLCLASS = 'AP'\n  AND NVL(DR, 0) = 0;","rule_id":"Rule_SCF_UP_01"},"SCF-UP-02":{"id":"SCF-UP-02","name":"应付笔数","topic":"上游供应商","scenario":"供应链","formula":"COUNT(应付单)","biz_desc":"报告期内应付单据笔数","fibo":[],"class_name":"PayableBillCount","tables":[{"code":"AP_PAYABLEBILL","zh":"应付单主表"}],"fields":[{"tbl_code":"AP_PAYABLEBILL","tbl_zh":"应付单主表","items":[{"code":"BILLPERIOD","zh":"单据期间"},{"code":"BILLYEAR","zh":"单据年度"},{"code":"PK_ORG","zh":"组织"}]}],"accounts":[],"sql":"-- SCF-UP-02 应付笔数\nSELECT COUNT(*) AS payable_bill_count\nFROM AP_PAYABLEBILL\nWHERE PK_ORG = :org_id\n  AND BILLYEAR = :year AND BILLPERIOD = :period\n  AND NVL(DR, 0) = 0;","rule_id":"Rule_SCF_UP_02"},"SCF-UP-03":{"id":"SCF-UP-03","name":"应付平均单笔金额","topic":"上游供应商","scenario":"供应链","formula":"应付总额/笔数","biz_desc":"平均每笔应付单金额","fibo":[{"zh":"货币金额 (MonetaryAmount)","uri":"fibo-fnd-acc-cur:MonetaryAmount"}],"class_name":"AvgPayableAmount","tables":[{"code":"AP_PAYABLEBILL","zh":"应付单主表"}],"fields":[{"tbl_code":"AP_PAYABLEBILL","tbl_zh":"应付单主表","items":[{"code":"BILLPERIOD","zh":"单据期间"},{"code":"BILLYEAR","zh":"单据年度"},{"code":"LOCAL_MONEY","zh":"本币金额"},{"code":"PK_ORG","zh":"组织"}]}],"accounts":[],"sql":"-- SCF-UP-03 应付平均单笔金额\nSELECT ROUND(NVL(SUM(LOCAL_MONEY), 0) / NULLIF(COUNT(*), 0), 2) AS avg_payable_amount\nFROM AP_PAYABLEBILL\nWHERE PK_ORG = :org_id\n  AND BILLYEAR = :year AND BILLPERIOD = :period\n  AND NVL(DR, 0) = 0;","rule_id":"Rule_SCF_UP_03"},"SCF-UP-05":{"id":"SCF-UP-05","name":"长期供应商数","topic":"上游供应商","scenario":"供应链","formula":"COUNT where BEGINDATE 早于 asof-1y","biz_desc":"合作超过1年的长期供应商数","fibo":[{"zh":"交易对手 (Counterparty)","uri":"fibo-fbc-pas-fpas:Counterparty"}],"class_name":"LongTermSupplierCount","tables":[{"code":"BD_SUPPLIER","zh":"供应商基础档案"}],"fields":[{"tbl_code":"BD_SUPPLIER","tbl_zh":"供应商基础档案","items":[{"code":"BEGINDATE","zh":"启用日期"},{"code":"ENABLESTATE","zh":"启用状态"},{"code":"PK_ORG","zh":"所属组织"}]}],"accounts":[],"sql":"-- SCF-UP-05 长期供应商数(开始日期早于 asof_date-1 年)\nSELECT COUNT(*) AS long_term_supplier_count\nFROM BD_SUPPLIER\nWHERE PK_ORG = :org_id\n  AND ENABLESTATE = 2\n  AND BEGINDATE <= TO_CHAR(ADD_MONTHS(TO_DATE(:asof_date,'YYYY-MM-DD'), -12), 'YYYY-MM-DD HH24:MI:SS')\n  AND NVL(DR, 0) = 0;","rule_id":"Rule_SCF_UP_05"},"SCF-DOWN-01":{"id":"SCF-DOWN-01","name":"应收账款总额","topic":"下游客户","scenario":"供应链","formula":"SUM(应收余额)","biz_desc":"当前应收账款余额合计","fibo":[{"zh":"货币金额 (MonetaryAmount)","uri":"fibo-fnd-acc-cur:MonetaryAmount"},{"zh":"债务 (Debt)","uri":"fibo-fbc-dae-dbt:Debt"}],"class_name":"TotalReceivable","tables":[{"code":"ARAP_BALANCE","zh":"往来余额表"}],"fields":[{"tbl_code":"ARAP_BALANCE","tbl_zh":"往来余额表","items":[{"code":"ACCPERIOD","zh":"会计期间"},{"code":"ACCYEAR","zh":"会计年度"},{"code":"BILLCLASS","zh":"单据类别(AR/AP)"},{"code":"LOCAL_MONEY_CR","zh":"本币贷方"},{"code":"LOCAL_MONEY_DE","zh":"本币借方"},{"code":"PK_ORG","zh":"组织"}]}],"accounts":[],"sql":"-- SCF-DOWN-01 应收账款总额\nSELECT NVL(SUM(LOCAL_MONEY_DE - LOCAL_MONEY_CR), 0) AS total_receivable\nFROM ARAP_BALANCE\nWHERE PK_ORG = :org_id\n  AND ACCYEAR = :year AND ACCPERIOD = :period\n  AND BILLCLASS = 'AR'\n  AND NVL(DR, 0) = 0;","rule_id":"Rule_SCF_DOWN_01"},"SCF-DOWN-02":{"id":"SCF-DOWN-02","name":"应收笔数","topic":"下游客户","scenario":"供应链","formula":"COUNT(应收单)","biz_desc":"报告期内应收单据笔数","fibo":[],"class_name":"ReceivableBillCount","tables":[{"code":"AR_RECBILL","zh":"应收单主表"}],"fields":[{"tbl_code":"AR_RECBILL","tbl_zh":"应收单主表","items":[{"code":"BILLPERIOD","zh":"单据期间"},{"code":"BILLYEAR","zh":"单据年度"},{"code":"PK_ORG","zh":"组织主键"}]}],"accounts":[],"sql":"-- SCF-DOWN-02 应收笔数\nSELECT COUNT(*) AS receivable_bill_count\nFROM AR_RECBILL\nWHERE PK_ORG = :org_id\n  AND BILLYEAR = :year AND BILLPERIOD = :period\n  AND NVL(DR, 0) = 0;","rule_id":"Rule_SCF_DOWN_02"},"SCF-DOWN-03":{"id":"SCF-DOWN-03","name":"应收平均单笔金额","topic":"下游客户","scenario":"供应链","formula":"应收总额/笔数","biz_desc":"平均每笔应收单金额","fibo":[{"zh":"货币金额 (MonetaryAmount)","uri":"fibo-fnd-acc-cur:MonetaryAmount"}],"class_name":"AvgReceivableAmount","tables":[{"code":"AR_RECBILL","zh":"应收单主表"}],"fields":[{"tbl_code":"AR_RECBILL","tbl_zh":"应收单主表","items":[{"code":"BILLPERIOD","zh":"单据期间"},{"code":"BILLYEAR","zh":"单据年度"},{"code":"LOCAL_MONEY","zh":"本币金额"},{"code":"PK_ORG","zh":"组织主键"}]}],"accounts":[],"sql":"-- SCF-DOWN-03 应收平均单笔金额\nSELECT ROUND(NVL(SUM(LOCAL_MONEY), 0) / NULLIF(COUNT(*), 0), 2) AS avg_receivable_amount\nFROM AR_RECBILL\nWHERE PK_ORG = :org_id\n  AND BILLYEAR = :year AND BILLPERIOD = :period\n  AND NVL(DR, 0) = 0;","rule_id":"Rule_SCF_DOWN_03"},"SCF-DOWN-05":{"id":"SCF-DOWN-05","name":"长期客户数","topic":"下游客户","scenario":"供应链","formula":"COUNT where BEGINDATE 早于 asof-1y","biz_desc":"合作超过1年的长期客户数","fibo":[{"zh":"交易对手 (Counterparty)","uri":"fibo-fbc-pas-fpas:Counterparty"}],"class_name":"LongTermCustomerCount","tables":[{"code":"BD_CUSTOMER","zh":"客户基础档案"}],"fields":[{"tbl_code":"BD_CUSTOMER","tbl_zh":"客户基础档案","items":[{"code":"BEGINDATE","zh":"客户启用日期"},{"code":"ENABLESTATE","zh":"启用状态"},{"code":"PK_ORG","zh":"所属组织"}]}],"accounts":[],"sql":"-- SCF-DOWN-05 长期客户数\nSELECT COUNT(*) AS long_term_customer_count\nFROM BD_CUSTOMER\nWHERE PK_ORG = :org_id\n  AND ENABLESTATE = 2\n  AND BEGINDATE <= TO_CHAR(ADD_MONTHS(TO_DATE(:asof_date,'YYYY-MM-DD'), -12), 'YYYY-MM-DD HH24:MI:SS')\n  AND NVL(DR, 0) = 0;","rule_id":"Rule_SCF_DOWN_05"},"SCF-ORDER-01":{"id":"SCF-ORDER-01","name":"期间采购订单数","topic":"订单","scenario":"供应链","formula":"COUNT(采购订单)","biz_desc":"报告期内采购订单数量","fibo":[],"class_name":"PeriodPOCount","tables":[{"code":"PO_ORDER","zh":"采购订单主表"}],"fields":[{"tbl_code":"PO_ORDER","tbl_zh":"采购订单主表","items":[{"code":"DBILLDATE","zh":"单据日期"},{"code":"PK_ORG","zh":"采购组织"}]}],"accounts":[],"sql":"-- SCF-ORDER-01 期间采购订单数\nSELECT COUNT(*) AS period_po_count\nFROM PO_ORDER\nWHERE PK_ORG = :org_id\n  AND DBILLDATE BETWEEN :start_date AND :asof_date\n  AND NVL(DR, 0) = 0;","rule_id":"Rule_SCF_ORDER_01"},"SCF-ORDER-02":{"id":"SCF-ORDER-02","name":"期间采购订单金额","topic":"订单","scenario":"供应链","formula":"SUM(订单金额)","biz_desc":"报告期内采购订单金额合计","fibo":[{"zh":"货币金额 (MonetaryAmount)","uri":"fibo-fnd-acc-cur:MonetaryAmount"}],"class_name":"PeriodPOAmount","tables":[{"code":"PO_ORDER","zh":"采购订单主表"}],"fields":[{"tbl_code":"PO_ORDER","tbl_zh":"采购订单主表","items":[{"code":"DBILLDATE","zh":"单据日期"},{"code":"NTOTALORIGMNY","zh":"订单总原币金额"},{"code":"PK_ORG","zh":"采购组织"}]}],"accounts":[],"sql":"-- SCF-ORDER-02 期间采购订单金额\nSELECT NVL(SUM(NTOTALORIGMNY), 0) AS period_po_amount\nFROM PO_ORDER\nWHERE PK_ORG = :org_id\n  AND DBILLDATE BETWEEN :start_date AND :asof_date\n  AND NVL(DR, 0) = 0;","rule_id":"Rule_SCF_ORDER_02"},"SCF-CT-02":{"id":"SCF-CT-02","name":"在手销售合同总金额(可保理)","topic":"合同","scenario":"供应链","formula":"SUM(执行中合同金额)","biz_desc":"可用于保理业务的在手销售合同金额","fibo":[{"zh":"合同 (Contract)","uri":"fibo-fnd-agr-ctr:Contract"},{"zh":"货币金额 (MonetaryAmount)","uri":"fibo-fnd-acc-cur:MonetaryAmount"}],"class_name":"FactorableContractAmount","tables":[{"code":"CT_SALE","zh":"销售合同主表"}],"fields":[{"tbl_code":"CT_SALE","tbl_zh":"销售合同主表","items":[{"code":"ACTUALINVALIDATE","zh":"实际失效日期"},{"code":"FSTATUSFLAG","zh":"合同状态"},{"code":"NTOTALORIGMNY","zh":"合同总金额"},{"code":"PK_ORG","zh":"组织"}]}],"accounts":[],"sql":"-- SCF-CT-02 在手销售合同总金额(可保理基础)\nSELECT NVL(SUM(NTOTALORIGMNY), 0) AS factorable_contract_amount\nFROM CT_SALE\nWHERE PK_ORG = :org_id\n  AND FSTATUSFLAG IN (2, 3)\n  AND (ACTUALINVALIDATE IS NULL OR ACTUALINVALIDATE > :asof_date)\n  AND NVL(DR, 0) = 0;","rule_id":"Rule_SCF_CT_02"},"SCF-LOAN-01":{"id":"SCF-LOAN-01","name":"融资机构数","topic":"融资行为","scenario":"供应链","formula":"DISTINCT(出借方)","biz_desc":"企业合作过的融资机构数量","fibo":[],"class_name":"FinancingInstitutionCount","tables":[{"code":"CDMC_CONTRACT","zh":"融资合同主表"}],"fields":[{"tbl_code":"CDMC_CONTRACT","tbl_zh":"融资合同主表","items":[{"code":"BEGINDATE","zh":"起始日期"},{"code":"PK_FINANCORG","zh":"金融机构主键"},{"code":"PK_ORG","zh":"组织"}]}],"accounts":[],"sql":"-- SCF-LOAN-01 融资机构数(去重)\nSELECT COUNT(DISTINCT PK_FINANCORG) AS financing_institution_count\nFROM CDMC_CONTRACT\nWHERE PK_ORG = :org_id\n  AND NVL(DR, 0) = 0\n  AND BEGINDATE <= :asof_date;","rule_id":"Rule_SCF_LOAN_01"},"SCF-LOAN-02":{"id":"SCF-LOAN-02","name":"融资渠道数","topic":"融资行为","scenario":"供应链","formula":"DISTINCT(融资方式)","biz_desc":"企业使用的融资渠道总数","fibo":[],"class_name":"FinancingChannelCount","tables":[{"code":"BATM_FINANCING","zh":"融资台账表"},{"code":"BOND_CONTRACT","zh":"债券合同表"},{"code":"CDMC_CONTRACT","zh":"融资合同主表"}],"fields":[{"tbl_code":"BATM_FINANCING","tbl_zh":"融资台账表","items":[{"code":"BEGINDATE","zh":"起始日期"},{"code":"DR","zh":"删除标志"},{"code":"FINANCING_ORG","zh":"融资机构"},{"code":"PK_ORG","zh":"组织"}]},{"tbl_code":"BOND_CONTRACT","tbl_zh":"债券合同表","items":[{"code":"DR","zh":"删除标志"},{"code":"ISSUERID","zh":"债券发行机构"},{"code":"ISSUESTARTDATE","zh":"发行开始日期"},{"code":"PK_ORG","zh":"发行组织"}]},{"tbl_code":"CDMC_CONTRACT","tbl_zh":"融资合同主表","items":[{"code":"BEGINDATE","zh":"起始日期"},{"code":"DR","zh":"删除标志"},{"code":"PK_FINANCORG","zh":"金融机构主键"},{"code":"PK_ORG","zh":"组织"}]}],"accounts":[],"sql":"-- SCF-LOAN-02 融资渠道数(合并 CDMC/BOND/BATM 各自去重方式后求和)\nSELECT\n  (SELECT COUNT(DISTINCT PK_FINANCORG) FROM CDMC_CONTRACT\n   WHERE PK_ORG = :org_id AND NVL(DR, 0) = 0 AND BEGINDATE <= :asof_date)\n+ (SELECT COUNT(DISTINCT ISSUERID) FROM BOND_CONTRACT\n   WHERE PK_ORG = :org_id AND NVL(DR, 0) = 0 AND ISSUESTARTDATE <= :asof_date)\n+ (SELECT COUNT(DISTINCT FINANCING_ORG) FROM BATM_FINANCING\n   WHERE PK_ORG = :org_id AND NVL(DR, 0) = 0 AND BEGINDATE <= :asof_date)\n  AS financing_channel_count\nFROM dual;\n-- TODO #SCFL-1: 如有跨表机构重复,需做全局去重(本 SQL 简化为各自去重后求和)","rule_id":"Rule_SCF_LOAN_02"},"SCF-INV-01":{"id":"SCF-INV-01","name":"期末存货总额","topic":"存货融资","scenario":"供应链","formula":"SUM(存货月末金额)","biz_desc":"期末存货账面金额","fibo":[{"zh":"货币金额 (MonetaryAmount)","uri":"fibo-fnd-acc-cur:MonetaryAmount"}],"class_name":"EndingInventoryAmount","tables":[{"code":"IA_MONTHNAB","zh":"存货月末余额表"}],"fields":[{"tbl_code":"IA_MONTHNAB","tbl_zh":"存货月末余额表","items":[{"code":"CACCOUNTPERIOD","zh":"会计期间(YYYY-MM)"},{"code":"NABMNY","zh":"月末原币金额"},{"code":"PK_ORG","zh":"组织"}]}],"accounts":[],"sql":"-- SCF-INV-01 期末存货总额\nSELECT NVL(SUM(NABMNY), 0) AS ending_inventory_amount\nFROM IA_MONTHNAB\nWHERE PK_ORG = :org_id\n  AND CACCOUNTPERIOD = :year||LPAD(:period, 2, '0')\n  AND NVL(DR, 0) = 0;","rule_id":"Rule_SCF_INV_01"},"SCF-INV-02":{"id":"SCF-INV-02","name":"平均存货余额","topic":"存货融资","scenario":"供应链","formula":"AVG(近12月存货)","biz_desc":"近12月月均存货余额","fibo":[{"zh":"货币金额 (MonetaryAmount)","uri":"fibo-fnd-acc-cur:MonetaryAmount"}],"class_name":"AvgInventoryAmount","tables":[{"code":"IA_MONTHNAB","zh":"存货月末余额表"}],"fields":[{"tbl_code":"IA_MONTHNAB","tbl_zh":"存货月末余额表","items":[{"code":"CACCOUNTPERIOD","zh":"会计期间(YYYY-MM)"},{"code":"NABMNY","zh":"月末原币金额"},{"code":"PK_ORG","zh":"组织"}]}],"accounts":[],"sql":"-- SCF-INV-02 平均存货余额 = 近12月存货月末均值\nSELECT ROUND(AVG(NABMNY), 2) AS avg_inventory_amount FROM (\n  SELECT CACCOUNTPERIOD, SUM(NABMNY) AS NABMNY\n  FROM IA_MONTHNAB\n  WHERE PK_ORG = :org_id\n    AND CACCOUNTPERIOD >= TO_CHAR(ADD_MONTHS(TO_DATE(:year||LPAD(:period, 2, '0'),'YYYYMM'), -11), 'YYYYMM')\n    AND CACCOUNTPERIOD <= :year||LPAD(:period, 2, '0')\n    AND NVL(DR, 0) = 0\n  GROUP BY CACCOUNTPERIOD\n);","rule_id":"Rule_SCF_INV_02"}};
+
+function goPage(id, btn){
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('on'));
+  document.getElementById('p-'+id).classList.add('on');
+  document.querySelectorAll('.ni').forEach(b => b.classList.remove('on'));
+  btn.classList.add('on');
+  window.scrollTo(0,0);
+}
+function scrollTo2(id){
+  const el = document.getElementById(id);
+  if(!el) return;
+  const offset = 70;
+  const y = el.getBoundingClientRect().top + window.pageYOffset - offset;
+  window.scrollTo({top:y, behavior:'smooth'});
+}
+function selDn(el){
+  el.parentElement.querySelectorAll('.dn-item').forEach(i => i.classList.remove('on'));
+  el.classList.add('on');
+}
+
+function openDrawer(iid){
+  const d = ALL_IND[iid];
+  if(!d) { alert('未找到指标: '+iid); return; }
+  document.getElementById('d-name').textContent = '【' + d.topic + '】' + d.name;
+  document.getElementById('d-dim').textContent = d.scenario + ' · ' + d.id;
+  document.getElementById('drw-body').innerHTML = buildDrawer(d);
+  document.getElementById('dov').classList.add('on');
+}
+function closeDrawer(){
+  document.getElementById('dov').classList.remove('on');
+}
+
+function highlightSQL(sql){
+  // 简单 SQL 高亮:关键字、字符串、注释
+  return sql
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+    .replace(/(--[^\n]*)/g, '<span class="cm">$1</span>')
+    .replace(/\b(SELECT|FROM|WHERE|AND|OR|GROUP BY|ORDER BY|HAVING|JOIN|LEFT|INNER|WITH|AS|CASE|WHEN|THEN|ELSE|END|LIKE|IN|IS|NULL|NOT|SUM|COUNT|AVG|MAX|MIN|NVL|NULLIF|ROUND|DISTINCT|BETWEEN)\b/gi,
+             '<span class="kw">$1</span>')
+    .replace(/('[^']*')/g, '<span class="str">$1</span>');
+}
+
+function buildDrawer(d){
+  // FIBO 映射
+  const fiboHTML = d.fibo.length
+    ? d.fibo.map(f => `<div class="fibo-item"><span class="fibo-zh">✓ ${f.zh}</span><span class="fibo-uri">${f.uri}</span></div>`).join('')
+    : '<div style="font-size:11px;color:var(--ink-soft)">无对应 FIBO 类,使用 yql:自定义类</div>';
+
+  // 本体三层示意
+  const ontoHTML = `
+    <div class="onto-graph">
+      <div style="font-size:10px;color:var(--ink-soft);margin-bottom:8px">本体三层(v1.4 建模)</div>
+      <div style="display:flex;align-items:center;gap:4px;flex-wrap:wrap">
+        <span class="onto-node ind">概念 · yql:${d.class_name}</span>
+        <span class="onto-arrow">←</span>
+        <span class="onto-node rule">规则 · rule:${d.rule_id}</span>
+        <span class="onto-arrow">←</span>
+        <span class="onto-node val">值 · val:Value_${d.class_name}_{机构}_{期间}</span>
+      </div>
+      <div style="font-size:10px;color:var(--ink-soft);margin-top:8px">概念层由规则实现,规则执行后产生具体的取值</div>
+    </div>`;
+
+  // 字段分组
+  const fieldsHTML = d.fields.length
+    ? d.fields.map(grp => `
+        <div class="table-grp">
+          <div class="table-grp-hd">${grp.tbl_zh} <span style="font-family:var(--mono);font-size:10px;color:var(--ink-soft)">(${grp.tbl_code})</span></div>
+          <div class="field-list">${grp.items.map(f => `<span class="field-chip"><span class="fc-code">${f.code}</span>${f.zh}</span>`).join('')}</div>
+        </div>`).join('')
+    : '<div style="font-size:11px;color:var(--ink-soft)">无具体字段依赖</div>';
+
+  // 会计科目
+  const accHTML = d.accounts.length
+    ? `<div class="chip-list">${d.accounts.map(a => `<span class="chip gold"><span class="c-code">${a.code}</span>${a.zh}</span>`).join('')}</div>`
+    : '<div style="font-size:11px;color:var(--ink-soft)">无会计科目依赖</div>';
+
+  // 使用的表
+  const tablesHTML = d.tables.length
+    ? `<div class="chip-list">${d.tables.map(t => `<span class="chip blue"><span class="c-code">${t.code}</span>${t.zh}</span>`).join('')}</div>`
+    : '<div style="font-size:11px;color:var(--ink-soft)">—</div>';
+
+  return `
+    <div class="val-hero">
+      <div class="vh-block">
+        <div class="vh-lbl">业务口径</div>
+        <div class="vh-val" style="font-size:14px;line-height:1.5;font-family:var(--sans)">${d.biz_desc || '<span style="color:var(--ink-soft)">待补充业务描述</span>'}</div>
+      </div>
+      <div class="vh-block">
+        <div class="vh-lbl">计算公式</div>
+        <div class="vh-val small">${d.formula}</div>
+      </div>
+    </div>
+
+    ${ontoHTML}
+
+    <div class="tabs">
+      <div class="tab on" onclick="switchTab(this, 'tab-biz')">业务视角</div>
+      <div class="tab" onclick="switchTab(this, 'tab-data')">数据视角</div>
+      <div class="tab" onclick="switchTab(this, 'tab-tech')">技术视角(SQL)</div>
+      <div class="tab" onclick="switchTab(this, 'tab-onto')">本体视角(FIBO)</div>
+    </div>
+
+    <div class="tab-body on" id="tab-biz">
+      <div class="sec-card">
+        <div class="sec-st"><span class="sec-st-icon">📋</span>指标基本信息</div>
+        <div style="display:grid;grid-template-columns:100px 1fr;gap:8px;font-size:12px">
+          <div style="color:var(--ink-soft)">指标编号</div><div style="font-family:var(--mono)">${d.id}</div>
+          <div style="color:var(--ink-soft)">业务主题</div><div>${d.topic}</div>
+          <div style="color:var(--ink-soft)">适用场景</div><div>${d.scenario}</div>
+          <div style="color:var(--ink-soft)">计算类别</div><div>yql:${d.class_name}</div>
+          <div style="color:var(--ink-soft)">复杂度</div><div>单表聚合(1 级)</div>
+        </div>
+      </div>
+      <div class="sec-card">
+        <div class="sec-st"><span class="sec-st-icon">💡</span>业务解读</div>
+        <div style="font-size:12px;line-height:1.75;color:var(--ink-mid)">
+          ${d.biz_desc || '待业务专家补充释义'}
+        </div>
+      </div>
+    </div>
+
+    <div class="tab-body" id="tab-data">
+      <div class="sec-card">
+        <div class="sec-st"><span class="sec-st-icon">🗂️</span>使用的 NCC 数据表</div>
+        ${tablesHTML}
+      </div>
+      <div class="sec-card">
+        <div class="sec-st"><span class="sec-st-icon">📊</span>具体字段依赖</div>
+        ${fieldsHTML}
+      </div>
+      <div class="sec-card">
+        <div class="sec-st"><span class="sec-st-icon">🏦</span>涉及会计科目</div>
+        ${accHTML}
+      </div>
+    </div>
+
+    <div class="tab-body" id="tab-tech">
+      <div class="sec-card">
+        <div class="sec-st"><span class="sec-st-icon">💻</span>SQL 实现(yql:hasSQL)</div>
+        <div class="sql-box">${highlightSQL(d.sql)}</div>
+        <div style="font-size:10px;color:var(--ink-soft);margin-top:8px;line-height:1.6">
+          占位符说明:<code>:org_id</code>=机构 / <code>:year</code>=年度 / <code>:period</code>=期间 / <code>:asof_date</code>=报告日 / <code>:start_date</code>=期初 / <code>:book_id</code>=账簿
+        </div>
+      </div>
+    </div>
+
+    <div class="tab-body" id="tab-onto">
+      <div class="sec-card gold">
+        <div class="sec-st"><span class="sec-st-icon">🌐</span>FIBO 国际标准对齐</div>
+        <div class="fibo-box">${fiboHTML}</div>
+        <div style="font-size:10px;color:var(--ink-soft);margin-top:10px;line-height:1.6">
+          通过 <code>skos:closeMatch</code> 关系与 FIBO 本体类对齐,可与国际金融机构建模互操作
+        </div>
+      </div>
+      <div class="sec-card">
+        <div class="sec-st"><span class="sec-st-icon">🔗</span>SPARQL 查询模板</div>
+        <div class="sql-box">PREFIX yql: &lt;http://yql.example.com/ontology/credit-risk/&gt;
+PREFIX rule: &lt;http://yql.example.com/ontology/calculation-rule/&gt;
+
+SELECT ?sql WHERE {
+  rule:${d.rule_id} yql:hasSQL ?sql .
+}</div>
+      </div>
+    </div>`;
+}
+
+function switchTab(el, targetId){
+  el.parentElement.querySelectorAll('.tab').forEach(t => t.classList.remove('on'));
+  el.classList.add('on');
+  el.parentElement.parentElement.querySelectorAll('.tab-body').forEach(t => t.classList.remove('on'));
+  document.getElementById(targetId).classList.add('on');
+}
+
+document.addEventListener('keydown', e => {
+  if(e.key === 'Escape') closeDrawer();
+});
+</script>
+
+</body>
+</html>

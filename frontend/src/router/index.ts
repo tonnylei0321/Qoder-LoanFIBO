@@ -13,6 +13,8 @@ import JobsView from '@/views/jobs/JobsView.vue'
 import NewJobView from '@/views/jobs/NewJobView.vue'
 import ReviewsView from '@/views/reviews/ReviewsView.vue'
 import UsersView from '@/views/users/UsersView.vue'
+import RolesView from '@/views/roles/RolesView.vue'
+import PermissionsView from '@/views/permissions/PermissionsView.vue'
 import SettingsView from '@/views/settings/SettingsView.vue'
 import PreLoanView from '@/views/loan-analysis/PreLoanView.vue'
 import PostLoanView from '@/views/loan-analysis/PostLoanView.vue'
@@ -83,6 +85,18 @@ const router = createRouter({
           path: 'users',
           name: 'users',
           component: UsersView,
+          meta: { requiresAdmin: true },
+        },
+        {
+          path: 'roles',
+          name: 'roles',
+          component: RolesView,
+          meta: { requiresAdmin: true },
+        },
+        {
+          path: 'permissions',
+          name: 'permissions',
+          component: PermissionsView,
           meta: { requiresAdmin: true },
         },
         {
@@ -198,6 +212,15 @@ router.beforeEach(async (to, from, next) => {
   if (to.meta.requiresAdmin && !authStore.isAdmin) {
     next('/dashboard')
     return
+  }
+
+  // Menu-based access control (skip for admin — menuCodes === null)
+  const routeName = to.name as string | undefined
+  if (routeName && routeName !== 'dashboard' && authStore.menuCodes !== null) {
+    if (!authStore.canAccessMenu(routeName)) {
+      next('/dashboard')
+      return
+    }
   }
 
   next()

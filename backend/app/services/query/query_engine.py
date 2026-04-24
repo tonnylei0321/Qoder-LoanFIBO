@@ -38,11 +38,17 @@ class QueryEngine:
         rule_matcher: RuleMatcher,
         sql_generator: SQLGenerator,
         cache: CompileCache,
+        sql_executor=None,
+        result_assembler=None,
+        dsl_executor=None,
     ):
         self.classifier = classifier
         self.rule_matcher = rule_matcher
         self.sql_generator = sql_generator
         self.cache = cache
+        self.sql_executor = sql_executor
+        self.result_assembler = result_assembler
+        self.dsl_executor = dsl_executor
 
     async def query(
         self,
@@ -114,8 +120,52 @@ class QueryEngine:
                 status=QueryStatus.REJECTED, message=f"查询生成失败: {e}"
             )
 
+        # 7. SQL执行（如果有执行器）
+        raw_data = None
+        if self.sql_executor:
+            try:
+                raw_data = await self.sql_executor.execute(sql, params)
+            except Exception as e:
+                logger.warning(f"SQL 执行失败，返回生成的 SQL: {e}")
+
+        # 8. 实时计算（如果有 DSL 执行器且规则含计算指标）
+        computed_values = None
+        if self.dsl_executor and matched_rule.columns:
+            computed_values = await self._compute_indicators(
+                matched_rule, raw_data
+            )
+
+        # 9. 结果组装（如果有组装器）
+        if self.result_assembler and raw_data:
+            assembled = self.result_assembler.assemble(raw_data, computed_values)
+            return QueryResult(
+                status=QueryStatus.SUCCESS,
+                sql=sql,
+                data=assembled,
+            )
+
+        # 降级：仅返回 SQL
         return QueryResult(
             status=QueryStatus.SUCCESS,
             sql=sql,
             data={"sql": sql, "params": params, "rule_id": matched_rule.id},
         )
+
+    async def _compute_indicators(
+        self, matched_rule: CompiledRule, raw_data
+    ) -> Optional[Dict]:
+        """计算派生指标"""
+        if not self.dsl_executor or not matched_rule.columns:
+            return None
+
+        computed = {}
+        for col in matched_rule.columns:
+            # 如果列名包含计算公式标记（如 _ratio, _index）
+            if any(suffix in col.lower() for suffix in ["ratio", "index", "score", "rate"]):
+                try:
+                    # 使用 DSLExecutor 实时计算
+                    result = self.dsl_executor.evaluate(col, raw_data or {})
+                    computed[col] = result
+                except Exception:
+                    pass  # 计算失败不影响主流程
+        return computed if computed else None

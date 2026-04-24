@@ -5,8 +5,13 @@ export interface Company {
   id: string
   name: string
   unified_code?: string
+  short_name?: string
   industry?: string
   region?: string
+  legal_person?: string
+  registered_capital?: string
+  is_active?: boolean
+  graph_uri?: string
   reg_tags: Record<string, boolean>
   created_at: string
 }

@@ -20,7 +20,8 @@ def make_table_registry(table_name="loan_account", raw_ddl="CREATE TABLE loan_ac
     registry.table_name = table_name
     registry.database_name = "lending_db"
     registry.raw_ddl = raw_ddl
-    registry.parsed_fields = parsed_fields or [{"name": "id", "type": "INT"}]
+    registry.table_comment = None  # Must be None/str, not MagicMock (avoids ' '.join TypeError)
+    registry.parsed_fields = parsed_fields or [{"field_name": "id", "field_type": "INT", "comment": ""}]
     registry.mapping_status = None
     return registry
 

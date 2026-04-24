@@ -2,9 +2,19 @@
 import request from './request'
 
 export const agentApi = {
+  // 企业列表
+  listOrgs: (params?: { search?: string; limit?: number; offset?: number }) => {
+    return request.get('/agent/orgs', { params })
+  },
+
   // 企业注册
   registerOrg: (data: { name: string; industry?: string; datasource?: string }) => {
     return request.post('/agent/orgs', data)
+  },
+
+  // 凭证列表
+  listCredentials: (orgId: string) => {
+    return request.get(`/agent/orgs/${orgId}/credentials`)
   },
 
   // 凭证管理

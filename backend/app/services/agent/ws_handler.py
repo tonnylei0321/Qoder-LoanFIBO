@@ -1,7 +1,9 @@
 """WebSocket 连接处理器 — 管理代理连接生命周期。
 
 生命周期：
-1. auth 消息认证（client_id + client_secret）
+1. Authorization: Bearer Header 认证（优先，若 Header 中携带 token）
+   或 auth 消息认证（client_id + client_secret）
+   或 auth_token 消息认证（OAuth2 access_token）
 2. register 消息（5 秒超时未收到则断开）
 3. 消息循环（heartbeat/ack/result/error）
 4. 断开连接时清理路由表
@@ -12,6 +14,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+from datetime import datetime, timezone
 from typing import Any
 
 from fastapi import WebSocket, WebSocketDisconnect
@@ -82,16 +85,97 @@ class AgentWSHandler:
             return None
 
         await ws.send_json({
+            "msg_id": auth_msg.get("msg_id", ""),
             "type": "auth_ok",
-            "client_id": client_id,
+            "tenant_id": "default",
+            "timestamp": int(datetime.now(timezone.utc).timestamp() * 1000),
+            "payload": {
+                "client_id": client_id,
+                "status": "ok",
+            },
         })
         return cred
 
-    async def handle_connection(self, ws: WebSocket, db_session=None, client_ip: str = "") -> None:
+    async def handle_auth_token(
+        self, ws: WebSocket, auth_msg: dict, db_session=None
+    ) -> AgentCredential | None:
+        """处理 auth_token 消息 — 使用 OAuth2 access_token 认证。
+
+        Args:
+            ws: WebSocket 连接
+            auth_msg: {"type": "auth_token", "access_token": "..."}
+            db_session: 数据库会话
+
+        Returns:
+            认证成功返回 AgentCredential 对象，失败返回 None。
+        """
+        from backend.app.services.auth import decode_token
+
+        access_token = auth_msg.get("access_token", "")
+        if not access_token:
+            await ws.send_json({
+                "type": "auth_error",
+                "message": "missing access_token",
+            })
+            return None
+
+        # 解码 JWT
+        payload = decode_token(access_token)
+        if payload is None:
+            await ws.send_json({
+                "type": "auth_error",
+                "message": "invalid or expired access_token",
+            })
+            return None
+
+        # 校验 sub == erp-agent
+        if payload.get("sub") != "erp-agent":
+            await ws.send_json({
+                "type": "auth_error",
+                "message": "invalid token subject",
+            })
+            return None
+
+        client_id = payload.get("client_id", "")
+        if not client_id or db_session is None:
+            await ws.send_json({
+                "type": "auth_error",
+                "message": "internal error: missing client_id or db session",
+            })
+            return None
+
+        # 查询凭证（确保未被吊销）
+        from sqlalchemy import select
+        from backend.app.models.agent_credential import AgentCredential
+        stmt = select(AgentCredential).where(AgentCredential.client_id == client_id)
+        result = await db_session.execute(stmt)
+        cred = result.scalar_one_or_none()
+
+        if cred is None or cred.revoked_at is not None:
+            await ws.send_json({
+                "type": "auth_error",
+                "message": "credential revoked or not found",
+            })
+            return None
+
+        await ws.send_json({
+            "msg_id": auth_msg.get("msg_id", ""),
+            "type": "auth_ok",
+            "tenant_id": "default",
+            "timestamp": int(datetime.now(timezone.utc).timestamp() * 1000),
+            "payload": {
+                "client_id": client_id,
+                "status": "ok",
+            },
+        })
+        return cred
+
+    async def handle_connection(self, ws: WebSocket, db_session=None, client_ip: str = "", header_token: str | None = None) -> None:
         """处理完整的 WebSocket 连接生命周期。
 
         流程：
-        1. auth → 验证凭证
+        1. 如果 header_token 存在 → 验证 JWT Bearer token 认证（优先）
+           否则 → auth / auth_token 消息认证（备选）
         2. register → 注册到路由表（5 秒超时）
         3. 消息循环 → heartbeat/ack/result/error
         4. finally → 清理路由表
@@ -100,22 +184,38 @@ class AgentWSHandler:
         datasource = None
 
         try:
-            # Phase 1: 等待 auth 消息
-            raw = await asyncio.wait_for(ws.receive_text(), timeout=REGISTER_TIMEOUT_SEC)
-            auth_msg = json.loads(raw)
+            # Phase 1: 认证
+            if header_token:
+                # 方式一（优先）：从 HTTP Authorization Header 提取的 Bearer token
+                cred = await self.handle_auth_token(
+                    ws, {"type": "auth_token", "access_token": header_token}, db_session,
+                )
+                if cred is None:
+                    await ws.close(code=4001, reason="auth failed (bearer header)")
+                    return
+            else:
+                # 方式二/三：等待首条 auth/auth_token 消息
+                raw = await asyncio.wait_for(ws.receive_text(), timeout=REGISTER_TIMEOUT_SEC)
+                auth_msg = json.loads(raw)
 
-            if auth_msg.get("type") != "auth":
-                await ws.send_json({
-                    "type": "auth_error",
-                    "message": "first message must be auth",
-                })
-                await ws.close(code=4001, reason="auth required")
-                return
+                msg_type = auth_msg.get("type", "")
+                if msg_type == "auth":
+                    # 方式二：client_id + client_secret 直接认证
+                    cred = await self.handle_auth(ws, auth_msg, db_session)
+                elif msg_type == "auth_token":
+                    # 方式三：OAuth2 access_token 消息认证
+                    cred = await self.handle_auth_token(ws, auth_msg, db_session)
+                else:
+                    await ws.send_json({
+                        "type": "auth_error",
+                        "message": "first message must be auth or auth_token",
+                    })
+                    await ws.close(code=4001, reason="auth required")
+                    return
 
-            cred = await self.handle_auth(ws, auth_msg, db_session)
-            if cred is None:
-                await ws.close(code=4001, reason="auth failed")
-                return
+                if cred is None:
+                    await ws.close(code=4001, reason="auth failed")
+                    return
 
             # 从凭证中提取 org_id 和 datasource（安全：不信任客户端）
             org_id = str(cred.org_id)
@@ -159,9 +259,16 @@ class AgentWSHandler:
                     pass
 
             await ws.send_json({
+                "msg_id": register_msg.get("msg_id", ""),
                 "type": "register_ack",
-                "org_id": org_id,
-                "datasource": datasource,
+                "tenant_id": "default",
+                "timestamp": int(datetime.now(timezone.utc).timestamp() * 1000),
+                "payload": {
+                    "msg_id": register_msg.get("msg_id", ""),
+                    "status": "ok",
+                    "server_time": int(datetime.now(timezone.utc).timestamp() * 1000),
+                    "min_version": "1.0.0",
+                },
             })
 
             logger.info(
@@ -186,7 +293,15 @@ class AgentWSHandler:
 
                 if msg_type == "heartbeat":
                     self._router.update_last_seen(org_id, datasource)
-                    await ws.send_json({"type": "heartbeat_ack"})
+                    await ws.send_json({
+                        "msg_id": msg.get("msg_id", ""),
+                        "type": "heartbeat_ack",
+                        "tenant_id": "default",
+                        "timestamp": int(datetime.now(timezone.utc).timestamp() * 1000),
+                        "payload": {
+                            "status": "ok",
+                        },
+                    })
 
                 elif msg_type == "ack":
                     msg_id = msg.get("msg_id", "")
@@ -194,14 +309,19 @@ class AgentWSHandler:
 
                 elif msg_type == "result":
                     msg_id = msg.get("msg_id", "")
-                    data = msg.get("data", {})
+                    # 兼容标准信封格式(payload)和扁平格式(data)
+                    data = msg.get("payload") or msg.get("data", {})
+                    if isinstance(data, dict) and "data" in data and "action" not in data:
+                        data = data["data"]
                     await self._task_queue.handle_result(msg_id, data)
                     # 对 query_indicator 结果做历史双写
                     await self._write_indicator_history_if_needed(msg_id, data, org_id)
 
                 elif msg_type == "error":
                     msg_id = msg.get("msg_id", "")
-                    error = msg.get("error", "unknown error")
+                    # 兼容标准信封格式(payload)和扁平格式(error)
+                    payload = msg.get("payload") or {}
+                    error = payload.get("error") or msg.get("error", "unknown error")
                     await self._task_queue.handle_error(msg_id, error)
 
                 else:
@@ -273,8 +393,8 @@ class AgentWSHandler:
                 )
                 await db.commit()
                 logger.info(
-                    "指标历史双写完成: org=%s msg_id=%s history=%d upsert=%d batch=%s",
-                    org_id, msg_id, result["history_count"], result["upserted_count"], result["batch_id"],
+                    "指标历史双写完成: org=%s msg_id=%s indicators=%d upserted=%d batch=%s values_count=%d",
+                    org_id, msg_id, result["history_count"], result["upserted_count"], result["batch_id"], len(values),
                 )
         except Exception as e:
             logger.error("指标历史双写失败: org=%s msg_id=%s err=%s", org_id, msg_id, e)
