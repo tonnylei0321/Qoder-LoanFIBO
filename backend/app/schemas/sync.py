@@ -23,9 +23,21 @@ class VersionResponse(BaseModel):
     status: str
     snapshot_data: Optional[Dict[str, Any]] = None
     created_by: Optional[str] = None
+    ttl_file_name: Optional[str] = None
+    ttl_file_size: Optional[int] = None
+    ttl_valid: Optional[bool] = None
+    ttl_validation_msg: Optional[str] = None
+    class_count: Optional[int] = None
+    property_count: Optional[int] = None
     published_at: Optional[str] = None
     synced_at: Optional[str] = None
     created_at: Optional[str] = None
+
+
+class VersionUpdateRequest(BaseModel):
+    """更新版本请求"""
+    version_tag: Optional[str] = Field(None, description="版本标签")
+    description: Optional[str] = Field(None, description="版本描述")
 
 
 class VersionPublishRequest(BaseModel):
@@ -42,6 +54,7 @@ class InstanceCreate(BaseModel):
     repo_id: str = Field(..., description="仓库 ID")
     domain: Optional[str] = Field(None, description="领域")
     namespace_prefix: str = Field(default="loanfibo", description="命名空间前缀")
+    version_id: Optional[str] = Field(None, description="绑定的版本ID")
 
 
 class InstanceResponse(BaseModel):
@@ -52,6 +65,7 @@ class InstanceResponse(BaseModel):
     repo_id: str
     domain: Optional[str] = None
     namespace_prefix: str = "loanfibo"
+    version_id: Optional[str] = None
     is_active: bool = True
     created_at: Optional[str] = None
 

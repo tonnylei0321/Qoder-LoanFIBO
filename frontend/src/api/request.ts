@@ -39,6 +39,18 @@ request.interceptors.response.use(
         ElMessage.error(data.message || '请求失败')
         return Promise.reject(new Error(data.message))
       }
+      // 如果有 total/overflow 等分页字段，一并返回
+      const extraKeys = ['total', 'overflow']
+      const extra: Record<string, any> = {}
+      for (const key of extraKeys) {
+        if (key in data) {
+          extra[key] = data[key]
+        }
+      }
+      // 如果 data.data 是数组且有额外分页字段，返回 { data: [...], total: N }
+      if (Array.isArray(data.data) && Object.keys(extra).length > 0) {
+        return { data: data.data, ...extra }
+      }
       return data.data
     }
     // 直接返回的业务数据

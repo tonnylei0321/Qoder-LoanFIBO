@@ -37,6 +37,11 @@ class AgentConn:
     ip: str = ""
     last_seen: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
     status: AgentStatus = AgentStatus.ONLINE
+    # 连接统计
+    connected_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+    total_tasks: int = 0
+    success_tasks: int = 0
+    fail_tasks: int = 0
 
     def to_redis_dict(self) -> dict:
         """序列化为 Redis Hash 字段（不含 ws 对象）。"""
@@ -47,6 +52,10 @@ class AgentConn:
             "ip": self.ip,
             "last_seen": self.last_seen.isoformat(),
             "status": self.status.value,
+            "connected_at": self.connected_at.isoformat(),
+            "total_tasks": str(self.total_tasks),
+            "success_tasks": str(self.success_tasks),
+            "fail_tasks": str(self.fail_tasks),
         }
 
     @classmethod
@@ -59,6 +68,10 @@ class AgentConn:
             "ip": data.get("ip", ""),
             "last_seen": data.get("last_seen", ""),
             "status": data.get("status", AgentStatus.OFFLINE.value),
+            "connected_at": data.get("connected_at", ""),
+            "total_tasks": int(data.get("total_tasks", 0)),
+            "success_tasks": int(data.get("success_tasks", 0)),
+            "fail_tasks": int(data.get("fail_tasks", 0)),
         }
 
 

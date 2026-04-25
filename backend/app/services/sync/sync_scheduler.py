@@ -32,7 +32,7 @@ class SyncScheduler:
     ) -> SyncTask:
         """创建同步任务
 
-        验证版本已发布、实例可用后才创建任务。
+        验证版本存在、实例可用后才创建任务。不再要求 published 状态。
         """
         # 验证版本
         version = await self.db.execute(
@@ -41,8 +41,8 @@ class SyncScheduler:
         ver = version.scalar_one_or_none()
         if ver is None:
             raise ValueError(f"版本不存在: {version_id}")
-        if ver.status != VersionStatus.PUBLISHED.value:
-            raise ValueError(f"版本 {version_id} 尚未发布，无法同步")
+        if not ver.ttl_file_path:
+            raise ValueError(f"版本 {version_id} 未上传 TTL 文件，无法同步")
 
         # 验证实例
         inst = await self.db.execute(
@@ -68,8 +68,12 @@ class SyncScheduler:
     async def execute_sync(self, task_id: str) -> SyncTask:
         """执行同步任务
 
-        将版本快照数据转换为 RDF 三元组并写入 GraphDB。
+        直接读取版本关联的 TTL 文件，导入到 GraphDB。
         """
+        import os
+        import httpx
+        from pathlib import Path
+
         task = await self._get_by_id(task_id)
         task.status = "running"
         task.progress = 0.0
@@ -81,8 +85,8 @@ class SyncScheduler:
                 select(PublishVersion).where(PublishVersion.id == task.version_id)
             )
             version = ver_result.scalar_one_or_none()
-            if version is None or version.snapshot_data is None:
-                raise ValueError("版本数据不存在")
+            if version is None or not version.ttl_file_path:
+                raise ValueError("版本数据不存在或未上传 TTL 文件")
 
             # 获取实例信息
             inst_result = await self.db.execute(
@@ -92,34 +96,63 @@ class SyncScheduler:
             if instance is None:
                 raise ValueError("实例不存在")
 
-            # 生成 RDF 三元组
-            from backend.app.services.sync.rdf_generator import RDFGenerator
-            generator = RDFGenerator(namespace_prefix=instance.namespace_prefix)
-            mappings = version.snapshot_data.get("mappings", [])
-            triples = generator.generate_three_layer_triples(mappings)
+            # 读取 TTL 文件
+            ttl_path = Path(version.ttl_file_path)
+            if not ttl_path.exists():
+                raise ValueError(f"TTL 文件不存在: {ttl_path}")
 
-            task.progress = 0.5
+            ttl_content = ttl_path.read_text(encoding="utf-8")
+            task.progress = 0.1
             await self.db.flush()
 
-            # 写入 GraphDB
-            turtle_data = generator.generate_turtle(triples)
-            await self._write_to_graphdb(instance, turtle_data, task.mode)
+            # GraphDB 导入 URL
+            url = f"{instance.server_url.rstrip('/')}/repositories/{instance.repo_id}/statements"
+            headers = {"Content-Type": "text/turtle"}
 
+            # replace 模式：先清空仓库
+            if task.mode == "replace":
+                async with httpx.AsyncClient(timeout=30.0) as client:
+                    await client.delete(url)
+                task.progress = 0.3
+                await self.db.flush()
+
+            # 将 TTL 内容分块导入（按行分割，每 500 行一批）
+            lines = ttl_content.split("\n")
+            total_lines = len(lines)
+            batch_size = 500
+            total_synced = 0
+
+            for i in range(0, total_lines, batch_size):
+                batch = "\n".join(lines[i:i + batch_size])
+                if not batch.strip():
+                    continue
+
+                async with httpx.AsyncClient(timeout=60.0) as client:
+                    resp = await client.post(url, content=batch, headers=headers)
+                    resp.raise_for_status()
+
+                total_synced += min(batch_size, total_lines - i)
+                # 进度: 0.3 ~ 0.9 按比例
+                task.progress = 0.3 + 0.6 * min(1.0, (i + batch_size) / total_lines)
+                task.triples_synced = total_synced
+                await self.db.flush()
+
+            # 完成
             task.status = "completed"
             task.progress = 1.0
-            task.triples_synced = len(triples)
             task.completed_at = datetime.now(timezone.utc)
 
             # 标记版本已同步
-            version.status = VersionStatus.SYNCED.value
-            version.synced_at = datetime.now(timezone.utc)
+            if version.status == VersionStatus.PUBLISHED.value:
+                version.status = VersionStatus.SYNCED.value
+                version.synced_at = datetime.now(timezone.utc)
 
             await self.db.flush()
-            logger.info(f"同步任务完成: {task_id}, {len(triples)} 条三元组")
+            logger.info(f"同步任务完成: {task_id}")
 
         except Exception as e:
             task.status = "failed"
-            task.error_message = str(e)
+            task.error_message = str(e)[:500]
             await self.db.flush()
             logger.error(f"同步任务失败: {task_id} - {e}")
 

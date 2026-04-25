@@ -1,11 +1,13 @@
-"""GraphDB 同步 API - 版本管理、实例管理、同步任务、外键推断"""
+"""GraphDB 同步 API - 版本管理、实例管理、同步任务"""
+import asyncio
 from typing import List, Optional
-from fastapi import APIRouter, HTTPException, status, Depends
+
+from fastapi import APIRouter, HTTPException, UploadFile, File, Form, status, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.app.database import get_db
 from backend.app.schemas.sync import (
-    VersionCreate, VersionResponse, VersionPublishRequest,
+    VersionResponse, VersionPublishRequest, VersionUpdateRequest,
     InstanceCreate, InstanceResponse, InstanceHealthResponse,
     SyncTaskCreate, SyncTaskResponse,
     ForeignKeyInferRequest, ForeignKeyResponse, ForeignKeyApproveRequest,
@@ -17,16 +19,53 @@ router = APIRouter()
 
 # ─── 版本管理 ──────────────────────────────────────────────────
 
+@router.post("/versions/upload", response_model=VersionResponse, status_code=status.HTTP_201_CREATED)
+async def upload_version_ttl(
+    version_tag: str = Form(...),
+    description: Optional[str] = Form(None),
+    created_by: Optional[str] = Form(None),
+    file: UploadFile = File(...),
+    db: AsyncSession = Depends(get_db),
+):
+    """上传 TTL 文件创建版本"""
+    if not file.filename:
+        raise HTTPException(status_code=400, detail="请选择文件")
+    if not file.filename.endswith(('.ttl', '.rdf')):
+        raise HTTPException(status_code=400, detail="仅支持 .ttl 或 .rdf 格式文件")
+
+    content = await file.read()
+    mgr = VersionManager(db)
+    try:
+        version = await mgr.create_version_with_ttl(
+            version_tag=version_tag,
+            ttl_content=content,
+            ttl_file_name=file.filename,
+            description=description,
+            created_by=created_by,
+        )
+        await db.commit()
+    except Exception as e:
+        await db.rollback()
+        raise HTTPException(status_code=400, detail=str(e))
+    return _version_to_response(version)
+
+
 @router.post("/versions", response_model=VersionResponse, status_code=status.HTTP_201_CREATED)
-async def create_version(data: VersionCreate, db: AsyncSession = Depends(get_db)):
-    """创建版本快照"""
+async def create_version(data: dict, db: AsyncSession = Depends(get_db)):
+    """创建版本快照（从映射数据自动采集）"""
+    from backend.app.schemas.sync import VersionCreate as VC
+    from pydantic import ValidationError
+    try:
+        parsed = VC(**data)
+    except ValidationError as e:
+        raise HTTPException(status_code=422, detail=str(e))
     mgr = VersionManager(db)
     try:
         version = await mgr.create_snapshot(
-            version_tag=data.version_tag,
-            description=data.description,
-            snapshot_data=data.snapshot_data,
-            created_by=data.created_by,
+            version_tag=parsed.version_tag,
+            description=parsed.description,
+            snapshot_data=parsed.snapshot_data,
+            created_by=parsed.created_by,
         )
         await db.commit()
     except Exception as e:
@@ -75,6 +114,39 @@ async def publish_version(
     return _version_to_response(version)
 
 
+@router.patch("/versions/{version_id}", response_model=VersionResponse)
+async def update_version(
+    version_id: str,
+    data: VersionUpdateRequest,
+    db: AsyncSession = Depends(get_db),
+):
+    """更新版本信息"""
+    mgr = VersionManager(db)
+    try:
+        version = await mgr.update_version(
+            version_id=version_id,
+            version_tag=data.version_tag,
+            description=data.description,
+        )
+        await db.commit()
+    except ValueError as e:
+        await db.rollback()
+        raise HTTPException(status_code=400, detail=str(e))
+    return _version_to_response(version)
+
+
+@router.delete("/versions/{version_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_version(version_id: str, db: AsyncSession = Depends(get_db)):
+    """删除版本（仅 draft 状态可删）"""
+    mgr = VersionManager(db)
+    try:
+        await mgr.delete_version(version_id)
+        await db.commit()
+    except ValueError as e:
+        await db.rollback()
+        raise HTTPException(status_code=400, detail=str(e))
+
+
 def _version_to_response(v) -> VersionResponse:
     return VersionResponse(
         id=v.id,
@@ -83,6 +155,12 @@ def _version_to_response(v) -> VersionResponse:
         status=v.status,
         snapshot_data=v.snapshot_data,
         created_by=v.created_by,
+        ttl_file_name=v.ttl_file_name,
+        ttl_file_size=v.ttl_file_size,
+        ttl_valid=v.ttl_valid,
+        ttl_validation_msg=v.ttl_validation_msg,
+        class_count=v.class_count,
+        property_count=v.property_count,
         published_at=v.published_at.isoformat() if v.published_at else None,
         synced_at=v.synced_at.isoformat() if v.synced_at else None,
         created_at=v.created_at.isoformat() if v.created_at else None,
@@ -101,6 +179,7 @@ async def create_instance(data: InstanceCreate, db: AsyncSession = Depends(get_d
         repo_id=data.repo_id,
         domain=data.domain,
         namespace_prefix=data.namespace_prefix,
+        version_id=data.version_id,
     )
     db.add(instance)
     await db.commit()
@@ -144,6 +223,7 @@ async def update_instance(instance_id: str, data: InstanceCreate, db: AsyncSessi
     instance.repo_id = data.repo_id
     instance.domain = data.domain
     instance.namespace_prefix = data.namespace_prefix
+    instance.version_id = data.version_id
     await db.commit()
     await db.refresh(instance)
     return _instance_to_response(instance)
@@ -194,6 +274,7 @@ def _instance_to_response(i) -> InstanceResponse:
         repo_id=i.repo_id,
         domain=i.domain,
         namespace_prefix=i.namespace_prefix,
+        version_id=i.version_id,
         is_active=i.is_active,
         created_at=i.created_at.isoformat() if i.created_at else None,
     )
@@ -203,7 +284,7 @@ def _instance_to_response(i) -> InstanceResponse:
 
 @router.post("/tasks", response_model=SyncTaskResponse, status_code=status.HTTP_201_CREATED)
 async def create_sync_task(data: SyncTaskCreate, db: AsyncSession = Depends(get_db)):
-    """创建同步任务"""
+    """创建同步任务并自动异步执行"""
     from backend.app.services.sync.sync_scheduler import SyncScheduler
     scheduler = SyncScheduler(db)
     try:
@@ -213,10 +294,25 @@ async def create_sync_task(data: SyncTaskCreate, db: AsyncSession = Depends(get_
             mode=data.mode,
         )
         await db.commit()
+        # 异步执行同步任务
+        asyncio.create_task(_run_sync_task(task.id, db))
     except ValueError as e:
         await db.rollback()
         raise HTTPException(status_code=400, detail=str(e))
     return _task_to_response(task)
+
+
+async def _run_sync_task(task_id: str, db: AsyncSession):
+    """后台执行同步任务"""
+    from backend.app.database import async_session_factory
+    from backend.app.services.sync.sync_scheduler import SyncScheduler
+    async with async_session_factory() as new_db:
+        scheduler = SyncScheduler(new_db)
+        try:
+            await scheduler.execute_sync(task_id)
+            await new_db.commit()
+        except Exception as e:
+            await new_db.rollback()
 
 
 @router.get("/tasks", response_model=List[SyncTaskResponse])

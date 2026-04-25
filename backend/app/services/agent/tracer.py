@@ -126,8 +126,8 @@ class TracerService:
     async def flush_to_pg(self, db_session) -> int:
         """从 Redis Stream 消费 Trace 并批量写入 PG。
 
+        使用 Consumer Group 只消费新消息，避免重复刷盘。
         每条消息独立事务：成功则 commit，失败则 rollback 后继续下一条。
-        避免 PG InFailedSQLTransactionError 导致整个批次死循环刷屏。
 
         Returns:
             写入的记录数。
@@ -135,13 +135,22 @@ class TracerService:
         if not self._redis:
             return 0
 
+        # 确保 Consumer Group 存在
+        group_name = "pg-flusher"
+        try:
+            await self._redis.xgroup_create(TRACE_STREAM, group_name, id="0", mkstream=True)
+        except Exception:
+            pass  # group already exists
+
         try:
             import json
             from sqlalchemy import text
 
-            # 读取 Stream 中未消费的消息
-            messages = await self._redis.xread(
-                {TRACE_STREAM: "0-0"}, count=50, block=0
+            # 用 XREADGROUP 只读未被消费的新消息
+            messages = await self._redis.xreadgroup(
+                group_name, "worker-1",
+                {TRACE_STREAM: ">"},
+                count=50, block=0,
             )
 
             if not messages:
@@ -157,7 +166,7 @@ class TracerService:
                             if isinstance(val, bytes):
                                 val = val.decode()
                             return val
-            
+        
                         spans_raw = _get(data, "spans")
                         spans = json.loads(spans_raw) if spans_raw else []
 
@@ -177,7 +186,10 @@ class TracerService:
                                 (trace_id, org_id, datasource, action, status, spans, duration_ms, created_at)
                                 VALUES (:trace_id, CAST(:org_id AS uuid), :datasource, :action, :status,
                                         CAST(:spans AS jsonb), :duration_ms, :created_at)
-                                ON CONFLICT (trace_id) DO NOTHING
+                                ON CONFLICT (trace_id) DO UPDATE SET
+                                    status = EXCLUDED.status,
+                                    spans = EXCLUDED.spans,
+                                    duration_ms = EXCLUDED.duration_ms
                             """),
                             {
                                 "trace_id": _get(data, "trace_id"),
@@ -198,8 +210,8 @@ class TracerService:
                         await db_session.rollback()
                         logger.warning("Trace 写入 PG 失败 (msg_id=%s): %s", msg_id, e)
 
-                    # 无论成功失败都确认消费，避免重复刷盘死循环
-                    await self._redis.xack(TRACE_STREAM, "pg-flusher", msg_id)
+                    # 无论成功失败都确认消费
+                    await self._redis.xack(TRACE_STREAM, group_name, msg_id)
 
             return count
 

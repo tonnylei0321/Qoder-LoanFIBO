@@ -29,7 +29,7 @@
                     当前取值
                   </div>
                   <div class="val-hero">
-                    <div class="vh-val" :class="valueHeroClass">{{ matchedValue }}</div>
+                    <div class="vh-val" :class="valueHeroClass">{{ matchedValueDisplay }}</div>
                     <div class="vh-info">
                       <div class="vh-name">{{ detail.tab1.label }}</div>
                       <div class="vh-fibo" v-if="detail.tab1.closeMatches.length">

@@ -136,9 +136,15 @@ class TaskQueue:
             }
             await conn.ws.send_json(task_msg)
 
+            # 更新连接统计 - 任务计数
+            conn.total_tasks += 1
+
             task.status = TaskStatus.DISPATCHED
             task.dispatched_at = datetime.now(timezone.utc)
-            self._tracer.add_span(trace, "ws_server", "task_dispatched", {"msg_id": msg_id})
+            self._tracer.add_span(trace, "ws_server", "task_dispatched", {
+                "msg_id": msg_id,
+                "request": task_msg,
+            })
             await self._tracer.save_to_redis(trace)
 
             # 启动超时监控
@@ -187,10 +193,15 @@ class TaskQueue:
         if task.trace:
             self._tracer.add_span(
                 task.trace, "ws_server", "result_received",
-                {"msg_id": msg_id, "data_keys": list(data.keys())},
+                {"msg_id": msg_id, "data_keys": list(data.keys()), "response": data},
             )
             self._tracer.update_status(task.trace, TaskStatus.COMPLETED.value)
             await self._tracer.save_to_redis(task.trace)
+
+        # 更新连接统计 - 成功计数
+        conn = self._router.get_connection(task.org_id, task.datasource)
+        if conn:
+            conn.success_tasks += 1
 
         result = {
             "status": TaskStatus.COMPLETED.value,
@@ -219,10 +230,15 @@ class TaskQueue:
         if task.trace:
             self._tracer.add_span(
                 task.trace, "ws_server", "error_received",
-                {"msg_id": msg_id, "error": error},
+                {"msg_id": msg_id, "error": error, "response": {"error": error}},
             )
             self._tracer.update_status(task.trace, TaskStatus.ERROR.value)
             await self._tracer.save_to_redis(task.trace)
+
+        # 更新连接统计 - 失败计数
+        conn = self._router.get_connection(task.org_id, task.datasource)
+        if conn:
+            conn.fail_tasks += 1
 
         result = {
             "status": TaskStatus.ERROR.value,

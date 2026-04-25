@@ -1,4 +1,4 @@
-/** GraphDB Sync API - 版本管理、实例管理、同步任务、外键推断 */
+/** GraphDB Sync API - 版本管理、实例管理、同步任务 */
 import request from './request'
 
 // ─── 版本管理 ──────────────────────────────────────────────────
@@ -10,6 +10,12 @@ export interface SyncVersion {
   status: string
   snapshot_data: Record<string, unknown> | null
   created_by: string | null
+  ttl_file_name: string | null
+  ttl_file_size: number | null
+  ttl_valid: boolean | null
+  ttl_validation_msg: string | null
+  class_count: number | null
+  property_count: number | null
   published_at: string | null
   synced_at: string | null
   created_at: string | null
@@ -22,6 +28,11 @@ export interface VersionCreateForm {
   created_by?: string
 }
 
+export interface VersionUpdateForm {
+  version_tag?: string
+  description?: string
+}
+
 // ─── 实例管理 ──────────────────────────────────────────────────
 
 export interface GraphDBInstance {
@@ -31,6 +42,7 @@ export interface GraphDBInstance {
   repo_id: string
   domain: string | null
   namespace_prefix: string
+  version_id: string | null
   is_active: boolean
   created_at: string | null
 }
@@ -41,6 +53,7 @@ export interface InstanceCreateForm {
   repo_id: string
   domain?: string
   namespace_prefix?: string
+  version_id?: string
 }
 
 export interface InstanceHealth {
@@ -72,27 +85,16 @@ export interface SyncTaskCreateForm {
   mode?: string
 }
 
-// ─── 外键推断 ──────────────────────────────────────────────────
-
-export interface ForeignKey {
-  id: string
-  source_table: string
-  source_column: string
-  target_table: string
-  target_column: string
-  confidence: number
-  status: string
-  inferred_by: string
-}
-
-export interface ForeignKeyInferForm {
-  table_names: string[]
-}
-
 // ─── API 方法 ──────────────────────────────────────────────────
 
 export const graphdbSyncApi = {
   // 版本管理
+  uploadVersionTTL: (formData: FormData): Promise<SyncVersion> => {
+    return request.post('/versions/upload', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    })
+  },
+
   createVersion: (data: VersionCreateForm): Promise<SyncVersion> => {
     return request.post('/versions', data)
   },
@@ -105,8 +107,16 @@ export const graphdbSyncApi = {
     return request.get(`/versions/${id}`)
   },
 
+  updateVersion: (id: string, data: VersionUpdateForm): Promise<SyncVersion> => {
+    return request.patch(`/versions/${id}`, data)
+  },
+
   publishVersion: (id: string, data?: { description?: string }): Promise<SyncVersion> => {
     return request.patch(`/versions/${id}/publish`, data)
+  },
+
+  deleteVersion: (id: string): Promise<void> => {
+    return request.delete(`/versions/${id}`)
   },
 
   // 实例管理
@@ -149,18 +159,5 @@ export const graphdbSyncApi = {
 
   getTaskProgress: (id: string): Promise<SyncTask> => {
     return request.get(`/tasks/${id}/progress`)
-  },
-
-  // 外键推断
-  inferForeignKeys: (data: ForeignKeyInferForm): Promise<ForeignKey[]> => {
-    return request.post('/infer-foreign-keys', data)
-  },
-
-  listForeignKeys: (params?: { source_table?: string; status_filter?: string }): Promise<ForeignKey[]> => {
-    return request.get('/foreign-keys', { params })
-  },
-
-  approveForeignKey: (id: string, action: 'approve' | 'reject'): Promise<ForeignKey> => {
-    return request.patch(`/foreign-keys/${id}`, { action })
   },
 }

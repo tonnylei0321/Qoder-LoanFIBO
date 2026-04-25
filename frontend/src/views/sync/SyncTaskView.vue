@@ -8,148 +8,122 @@
         </div>
         <div class="header-text">
           <h1>同步任务</h1>
-          <p class="subtitle">GraphDB 同步任务与外键推断管理</p>
+          <p class="subtitle">选择 TTL 版本导入 GraphDB，实时查看同步进度</p>
         </div>
       </div>
-      <el-button type="primary" class="btn-glow" @click="showCreateTaskDialog = true">
-        <el-icon><Plus /></el-icon>
-        新建同步
-      </el-button>
+      <div class="header-actions">
+        <el-button type="primary" class="btn-glow" @click="showCreateTaskDialog = true">
+          <el-icon><Plus /></el-icon>
+          新建同步
+        </el-button>
+        <el-button @click="loadTasks" :loading="loadingTasks">
+          <el-icon><Refresh /></el-icon>
+          刷新
+        </el-button>
+      </div>
     </div>
 
-    <!-- Tabs -->
-    <el-tabs v-model="activeTab" class="modern-tabs">
-      <!-- Sync Tasks Tab -->
-      <el-tab-pane label="同步任务" name="tasks">
-        <div class="task-stats-grid">
-          <div class="stat-card-glass">
-            <div class="stat-icon primary"><el-icon><List /></el-icon></div>
-            <div class="stat-info">
-              <span class="stat-value">{{ tasks.length }}</span>
-              <span class="stat-label">任务总数</span>
-            </div>
-          </div>
-          <div class="stat-card-glass">
-            <div class="stat-icon success"><el-icon><CircleCheck /></el-icon></div>
-            <div class="stat-info">
-              <span class="stat-value">{{ tasks.filter(t => t.status === 'completed').length }}</span>
-              <span class="stat-label">已完成</span>
-            </div>
-          </div>
-          <div class="stat-card-glass">
-            <div class="stat-icon warning"><el-icon><Loading /></el-icon></div>
-            <div class="stat-info">
-              <span class="stat-value">{{ tasks.filter(t => t.status === 'running').length }}</span>
-              <span class="stat-label">运行中</span>
-            </div>
-          </div>
-          <div class="stat-card-glass">
-            <div class="stat-icon danger"><el-icon><CircleClose /></el-icon></div>
-            <div class="stat-info">
-              <span class="stat-value">{{ tasks.filter(t => t.status === 'failed').length }}</span>
-              <span class="stat-label">失败</span>
-            </div>
-          </div>
+    <!-- Stats -->
+    <div class="task-stats-grid">
+      <div class="stat-card-glass">
+        <div class="stat-icon primary"><el-icon><List /></el-icon></div>
+        <div class="stat-info">
+          <span class="stat-value">{{ tasks.length }}</span>
+          <span class="stat-label">任务总数</span>
         </div>
+      </div>
+      <div class="stat-card-glass">
+        <div class="stat-icon success"><el-icon><CircleCheck /></el-icon></div>
+        <div class="stat-info">
+          <span class="stat-value">{{ tasks.filter(t => t.status === 'completed').length }}</span>
+          <span class="stat-label">已完成</span>
+        </div>
+      </div>
+      <div class="stat-card-glass">
+        <div class="stat-icon warning"><el-icon><Loading /></el-icon></div>
+        <div class="stat-info">
+          <span class="stat-value">{{ tasks.filter(t => t.status === 'running').length }}</span>
+          <span class="stat-label">运行中</span>
+        </div>
+      </div>
+      <div class="stat-card-glass">
+        <div class="stat-icon danger"><el-icon><CircleClose /></el-icon></div>
+        <div class="stat-info">
+          <span class="stat-value">{{ tasks.filter(t => t.status === 'failed').length }}</span>
+          <span class="stat-label">失败</span>
+        </div>
+      </div>
+    </div>
 
-        <div class="table-card">
-          <el-table :data="tasks" v-loading="loadingTasks" stripe style="width: 100%">
-            <el-table-column prop="id" label="任务 ID" width="120" show-overflow-tooltip />
-            <el-table-column prop="version_id" label="版本 ID" width="120" show-overflow-tooltip />
-            <el-table-column prop="instance_id" label="实例 ID" width="120" show-overflow-tooltip />
-            <el-table-column prop="mode" label="模式" width="100">
-              <template #default="{ row }">
-                <el-tag size="small" effect="plain">{{ row.mode }}</el-tag>
-              </template>
-            </el-table-column>
-            <el-table-column prop="status" label="状态" width="110">
-              <template #default="{ row }">
-                <el-tag :type="getTaskStatusType(row.status)" effect="dark" round size="small">
-                  {{ getTaskStatusText(row.status) }}
-                </el-tag>
-              </template>
-            </el-table-column>
-            <el-table-column prop="progress" label="进度" width="180">
-              <template #default="{ row }">
-                <el-progress
-                  :percentage="Math.round(row.progress * 100)"
-                  :status="row.status === 'completed' ? 'success' : row.status === 'failed' ? 'exception' : undefined"
-                  :stroke-width="8"
-                />
-              </template>
-            </el-table-column>
-            <el-table-column prop="triples_synced" label="三元组数" width="100" />
-            <el-table-column prop="created_at" label="创建时间" width="170">
-              <template #default="{ row }">{{ formatTime(row.created_at) }}</template>
-            </el-table-column>
-            <el-table-column label="操作" width="100" fixed="right">
-              <template #default="{ row }">
-                <el-button size="small" @click="refreshTask(row.id)">刷新</el-button>
-              </template>
-            </el-table-column>
-          </el-table>
-        </div>
-      </el-tab-pane>
-
-      <!-- Foreign Key Tab -->
-      <el-tab-pane label="外键推断" name="foreign-keys">
-        <div class="fk-actions">
-          <el-button type="primary" @click="showInferDialog = true">
-            <el-icon><MagicStick /></el-icon>
-            推断外键
-          </el-button>
-          <el-button @click="loadForeignKeys">
-            <el-icon><Refresh /></el-icon>
-            刷新列表
-          </el-button>
-        </div>
-
-        <div class="table-card">
-          <el-table :data="foreignKeys" v-loading="loadingFK" stripe style="width: 100%">
-            <el-table-column prop="source_table" label="源表" min-width="140" show-overflow-tooltip />
-            <el-table-column prop="source_column" label="源列" min-width="120" show-overflow-tooltip />
-            <el-table-column prop="target_table" label="目标表" min-width="140" show-overflow-tooltip />
-            <el-table-column prop="target_column" label="目标列" min-width="120" show-overflow-tooltip />
-            <el-table-column prop="confidence" label="置信度" width="100">
-              <template #default="{ row }">
-                <span :class="row.confidence >= 0.8 ? 'conf-high' : row.confidence >= 0.5 ? 'conf-mid' : 'conf-low'">
-                  {{ (row.confidence * 100).toFixed(0) }}%
-                </span>
-              </template>
-            </el-table-column>
-            <el-table-column prop="inferred_by" label="来源" width="90" />
-            <el-table-column prop="status" label="状态" width="100">
-              <template #default="{ row }">
-                <el-tag :type="row.status === 'approved' ? 'success' : row.status === 'rejected' ? 'danger' : 'warning'" effect="dark" round size="small">
-                  {{ row.status === 'approved' ? '已批准' : row.status === 'rejected' ? '已拒绝' : '待审核' }}
-                </el-tag>
-              </template>
-            </el-table-column>
-            <el-table-column label="操作" width="160" fixed="right">
-              <template #default="{ row }">
-                <template v-if="row.status === 'pending'">
-                  <el-button type="success" size="small" @click="approveFK(row.id, 'approve')">批准</el-button>
-                  <el-button type="danger" size="small" plain @click="approveFK(row.id, 'reject')">拒绝</el-button>
-                </template>
-                <span v-else class="done-text">已处理</span>
-              </template>
-            </el-table-column>
-          </el-table>
-        </div>
-      </el-tab-pane>
-    </el-tabs>
+    <!-- Task Table -->
+    <div class="table-card">
+      <el-table :data="tasks" v-loading="loadingTasks" stripe style="width: 100%">
+        <el-table-column label="版本" min-width="140">
+          <template #default="{ row }">
+            <span class="version-link">{{ getVersionTag(row.version_id) }}</span>
+          </template>
+        </el-table-column>
+        <el-table-column label="目标实例" min-width="140">
+          <template #default="{ row }">
+            <span>{{ getInstanceName(row.instance_id) }}</span>
+          </template>
+        </el-table-column>
+        <el-table-column prop="mode" label="模式" width="100">
+          <template #default="{ row }">
+            <el-tag size="small" effect="plain">{{ row.mode === 'replace' ? '全量替换' : '增量' }}</el-tag>
+          </template>
+        </el-table-column>
+        <el-table-column prop="status" label="状态" width="110">
+          <template #default="{ row }">
+            <el-tag :type="getTaskStatusType(row.status)" effect="dark" round size="small">
+              {{ getTaskStatusText(row.status) }}
+            </el-tag>
+          </template>
+        </el-table-column>
+        <el-table-column prop="progress" label="进度" width="200">
+          <template #default="{ row }">
+            <el-progress
+              :percentage="Math.round(row.progress * 100)"
+              :status="row.status === 'completed' ? 'success' : row.status === 'failed' ? 'exception' : undefined"
+              :stroke-width="8"
+            />
+          </template>
+        </el-table-column>
+        <el-table-column prop="triples_synced" label="已同步行数" width="110" />
+        <el-table-column label="错误信息" min-width="160" show-overflow-tooltip>
+          <template #default="{ row }">
+            <span v-if="row.error_message" class="error-text">{{ row.error_message }}</span>
+            <span v-else class="text-muted">-</span>
+          </template>
+        </el-table-column>
+        <el-table-column prop="created_at" label="创建时间" width="160">
+          <template #default="{ row }">{{ formatTime(row.created_at) }}</template>
+        </el-table-column>
+        <el-table-column label="操作" width="80" fixed="right">
+          <template #default="{ row }">
+            <el-button size="small" @click="refreshTask(row.id)" :loading="refreshing === row.id">刷新</el-button>
+          </template>
+        </el-table-column>
+      </el-table>
+    </div>
 
     <!-- Create Sync Task Dialog -->
     <el-dialog v-model="showCreateTaskDialog" title="新建同步任务" width="520px" :close-on-click-modal="false">
       <el-form :model="taskForm" label-width="100px">
-        <el-form-item label="发布版本" required>
-          <el-select v-model="taskForm.version_id" placeholder="选择已发布版本" style="width: 100%">
+        <el-form-item label="TTL 版本" required>
+          <el-select v-model="taskForm.version_id" placeholder="选择版本" style="width: 100%">
             <el-option
-              v-for="v in publishedVersions"
+              v-for="v in versionsWithTTL"
               :key="v.id"
-              :label="v.version_tag"
+              :label="v.version_tag + ' - ' + (v.ttl_file_name || '无文件')"
               :value="v.id"
-            />
+            >
+              <div style="display:flex;justify-content:space-between;align-items:center">
+                <span>{{ v.version_tag }}</span>
+                <el-tag v-if="v.ttl_valid === false" type="danger" size="small">语法异常</el-tag>
+                <el-tag v-else-if="v.ttl_valid === true" type="success" size="small">通过</el-tag>
+              </div>
+            </el-option>
           </el-select>
         </el-form-item>
         <el-form-item label="目标实例" required>
@@ -157,54 +131,48 @@
             <el-option
               v-for="i in activeInstances"
               :key="i.id"
-              :label="i.name"
+              :label="i.name + ' (' + i.repo_id + ')'"
               :value="i.id"
             />
           </el-select>
         </el-form-item>
         <el-form-item label="同步模式">
           <el-radio-group v-model="taskForm.mode">
-            <el-radio value="upsert">Upsert（增量）</el-radio>
-            <el-radio value="replace">Replace（全量替换）</el-radio>
+            <el-radio value="upsert">增量更新</el-radio>
+            <el-radio value="replace">全量替换</el-radio>
           </el-radio-group>
         </el-form-item>
       </el-form>
       <template #footer>
         <el-button @click="showCreateTaskDialog = false">取消</el-button>
-        <el-button type="primary" @click="handleCreateTask" :loading="creatingTask">创建</el-button>
-      </template>
-    </el-dialog>
-
-    <!-- Infer Foreign Key Dialog -->
-    <el-dialog v-model="showInferDialog" title="外键推断" width="500px" :close-on-click-modal="false">
-      <el-form label-width="100px">
-        <el-form-item label="表名列表">
-          <el-input
-            v-model="inferTableNames"
-            type="textarea"
-            :rows="4"
-            placeholder="每行一个表名，如：&#10;FI_COMPANY&#10;FI_INDICATOR&#10;FI_SCORE_RECORD"
-          />
-        </el-form-item>
-      </el-form>
-      <template #footer>
-        <el-button @click="showInferDialog = false">取消</el-button>
-        <el-button type="primary" @click="handleInfer" :loading="inferring">开始推断</el-button>
+        <el-button type="primary" @click="handleCreateTask" :loading="creatingTask">开始同步</el-button>
       </template>
     </el-dialog>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
-import { graphdbSyncApi, type SyncTask, type SyncTaskCreateForm, type SyncVersion, type GraphDBInstance, type ForeignKey } from '@/api/graphdbSync'
+import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { graphdbSyncApi, type SyncTask, type SyncTaskCreateForm, type SyncVersion, type GraphDBInstance } from '@/api/graphdbSync'
 import { ElMessage } from 'element-plus'
 
-const activeTab = ref('tasks')
-
-// ─── Sync Tasks ────────────────────────────────────────────
 const loadingTasks = ref(false)
+const refreshing = ref<string | null>(null)
 const tasks = ref<SyncTask[]>([])
+const allVersions = ref<SyncVersion[]>([])
+const allInstances = ref<GraphDBInstance[]>([])
+let pollTimer: ReturnType<typeof setInterval> | null = null
+
+const versionsWithTTL = computed(() => allVersions.value.filter(v => v.ttl_file_name))
+const activeInstances = computed(() => allInstances.value.filter(i => i.is_active))
+
+const showCreateTaskDialog = ref(false)
+const creatingTask = ref(false)
+const taskForm = ref<SyncTaskCreateForm>({
+  version_id: '',
+  instance_id: '',
+  mode: 'upsert',
+})
 
 async function loadTasks() {
   loadingTasks.value = true
@@ -217,32 +185,6 @@ async function loadTasks() {
   }
 }
 
-async function refreshTask(id: string) {
-  try {
-    const task = await graphdbSyncApi.getTaskProgress(id)
-    const idx = tasks.value.findIndex(t => t.id === id)
-    if (idx >= 0) tasks.value[idx] = task
-    ElMessage.success('已刷新')
-  } catch {
-    ElMessage.error('刷新失败')
-  }
-}
-
-// ─── Create Task Dialog ─────────────────────────────────────
-const showCreateTaskDialog = ref(false)
-const creatingTask = ref(false)
-const allVersions = ref<SyncVersion[]>([])
-const allInstances = ref<GraphDBInstance[]>([])
-
-const publishedVersions = computed(() => allVersions.value.filter(v => v.status === 'published'))
-const activeInstances = computed(() => allInstances.value.filter(i => i.is_active))
-
-const taskForm = ref<SyncTaskCreateForm>({
-  version_id: '',
-  instance_id: '',
-  mode: 'upsert',
-})
-
 async function loadFormData() {
   try {
     const [v, i] = await Promise.all([
@@ -251,8 +193,19 @@ async function loadFormData() {
     ])
     allVersions.value = v
     allInstances.value = i
+  } catch { /* silent */ }
+}
+
+async function refreshTask(id: string) {
+  refreshing.value = id
+  try {
+    const task = await graphdbSyncApi.getTaskProgress(id)
+    const idx = tasks.value.findIndex(t => t.id === id)
+    if (idx >= 0) tasks.value[idx] = task
   } catch {
-    // Silent
+    ElMessage.error('刷新失败')
+  } finally {
+    refreshing.value = null
   }
 }
 
@@ -264,7 +217,7 @@ async function handleCreateTask() {
   creatingTask.value = true
   try {
     await graphdbSyncApi.createSyncTask(taskForm.value)
-    ElMessage.success('同步任务已创建')
+    ElMessage.success('同步任务已创建并开始执行')
     showCreateTaskDialog.value = false
     taskForm.value = { version_id: '', instance_id: '', mode: 'upsert' }
     await loadTasks()
@@ -275,56 +228,16 @@ async function handleCreateTask() {
   }
 }
 
-// ─── Foreign Keys ───────────────────────────────────────────
-const loadingFK = ref(false)
-const foreignKeys = ref<ForeignKey[]>([])
-
-async function loadForeignKeys() {
-  loadingFK.value = true
-  try {
-    foreignKeys.value = await graphdbSyncApi.listForeignKeys()
-  } catch {
-    ElMessage.error('加载外键列表失败')
-  } finally {
-    loadingFK.value = false
-  }
+function getVersionTag(versionId: string): string {
+  const v = allVersions.value.find(ver => ver.id === versionId)
+  return v ? v.version_tag : versionId
 }
 
-const showInferDialog = ref(false)
-const inferTableNames = ref('')
-const inferring = ref(false)
-
-async function handleInfer() {
-  const names = inferTableNames.value.split('\n').map(s => s.trim()).filter(Boolean)
-  if (names.length === 0) {
-    ElMessage.warning('请输入至少一个表名')
-    return
-  }
-  inferring.value = true
-  try {
-    await graphdbSyncApi.inferForeignKeys({ table_names: names })
-    ElMessage.success('外键推断完成')
-    showInferDialog.value = false
-    inferTableNames.value = ''
-    await loadForeignKeys()
-  } catch {
-    ElMessage.error('推断失败')
-  } finally {
-    inferring.value = false
-  }
+function getInstanceName(instanceId: string): string {
+  const i = allInstances.value.find(inst => inst.id === instanceId)
+  return i ? i.name : instanceId
 }
 
-async function approveFK(id: string, action: 'approve' | 'reject') {
-  try {
-    await graphdbSyncApi.approveForeignKey(id, action)
-    ElMessage.success(action === 'approve' ? '已批准' : '已拒绝')
-    await loadForeignKeys()
-  } catch {
-    ElMessage.error('操作失败')
-  }
-}
-
-// ─── Helpers ────────────────────────────────────────────────
 function formatTime(iso?: string | null): string {
   if (!iso) return '-'
   try { return new Date(iso).toLocaleString('zh-CN') } catch { return iso }
@@ -342,8 +255,25 @@ function getTaskStatusText(s: string): string {
   return map[s] || s
 }
 
+// Auto-poll running tasks every 2 seconds
+function startPolling() {
+  pollTimer = setInterval(async () => {
+    const hasRunning = tasks.value.some(t => t.status === 'running' || t.status === 'pending')
+    if (hasRunning) {
+      try {
+        tasks.value = await graphdbSyncApi.listSyncTasks()
+      } catch { /* silent */ }
+    }
+  }, 2000)
+}
+
 onMounted(async () => {
-  await Promise.all([loadTasks(), loadForeignKeys(), loadFormData()])
+  await Promise.all([loadTasks(), loadFormData()])
+  startPolling()
+})
+
+onUnmounted(() => {
+  if (pollTimer) clearInterval(pollTimer)
 })
 </script>
 
@@ -364,6 +294,11 @@ onMounted(async () => {
   display: flex;
   align-items: center;
   gap: 12px;
+}
+
+.header-actions {
+  display: flex;
+  gap: 8px;
 }
 
 .header-icon {
@@ -447,18 +382,18 @@ onMounted(async () => {
   padding: 16px;
 }
 
-.fk-actions {
-  display: flex;
-  gap: 12px;
-  margin-bottom: 16px;
+.version-link {
+  font-family: 'Fira Code', monospace;
+  font-weight: 600;
+  color: #667eea;
 }
 
-.conf-high { color: #10b981; font-weight: 600; }
-.conf-mid { color: #f59e0b; font-weight: 600; }
-.conf-low { color: #ef4444; font-weight: 600; }
+.error-text {
+  color: #ef4444;
+  font-size: 0.82rem;
+}
 
-.done-text {
+.text-muted {
   color: var(--text-muted);
-  font-size: 0.8rem;
 }
 </style>

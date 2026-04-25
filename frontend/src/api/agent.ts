@@ -51,7 +51,7 @@ export const agentApi = {
   },
 
   // 追踪
-  getTraces: (params: { org_id?: string; limit?: number; offset?: number }) => {
+  getTraces: (params: { org_id?: string; status?: string; limit?: number; offset?: number }) => {
     return request.get('/agent/traces', { params })
   },
 
@@ -64,8 +64,8 @@ export const agentApi = {
     return request.post('/agent/task', data)
   },
 
-  // 手动触发指标采集
-  triggerCollect: (data?: { org_id: string; datasource?: string }) => {
+  // 手动触发指标采集（不传参数=全量采集）
+  triggerCollect: (data?: { org_id?: string; datasource?: string }) => {
     return request.post('/agent/collect', data || {})
   },
 }

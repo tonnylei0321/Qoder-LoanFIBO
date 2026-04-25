@@ -43,6 +43,13 @@
             <span class="info-label">领域</span>
             <span class="info-value">{{ inst.domain }}</span>
           </div>
+          <div class="info-row" v-if="inst.version_id">
+            <span class="info-label">绑定版本</span>
+            <span class="info-value mono">{{ getVersionTag(inst.version_id) }}</span>
+            <el-tag v-if="getVersionStatus(inst.version_id)" :type="statusTagType(getVersionStatus(inst.version_id)!)" effect="plain" size="small" style="margin-left: 4px">
+              {{ statusLabel(getVersionStatus(inst.version_id)!) }}
+            </el-tag>
+          </div>
           <!-- Health Status -->
           <div class="health-row" v-if="healthMap[inst.id]">
             <span class="info-label">健康状态</span>
@@ -88,6 +95,21 @@
         <el-form-item label="领域">
           <el-input v-model="form.domain" placeholder="如: finance" />
         </el-form-item>
+        <el-form-item label="绑定版本">
+          <el-select v-model="form.version_id" placeholder="选择版本（可选）" clearable style="width: 100%">
+            <el-option
+              v-for="v in publishedVersions"
+              :key="v.id"
+              :label="v.version_tag + (v.ttl_file_name ? ' (' + v.ttl_file_name + ')' : '')"
+              :value="v.id"
+            >
+              <div style="display:flex;justify-content:space-between;align-items:center">
+                <span>{{ v.version_tag }}</span>
+                <el-tag :type="statusTagType(v.status)" effect="plain" size="small">{{ statusLabel(v.status) }}</el-tag>
+              </div>
+            </el-option>
+          </el-select>
+        </el-form-item>
       </el-form>
       <template #footer>
         <el-button @click="showDialog = false">取消</el-button>
@@ -98,12 +120,13 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
-import { graphdbSyncApi, type GraphDBInstance, type InstanceCreateForm, type InstanceHealth } from '@/api/graphdbSync'
+import { ref, computed, onMounted } from 'vue'
+import { graphdbSyncApi, type GraphDBInstance, type InstanceCreateForm, type InstanceHealth, type SyncVersion } from '@/api/graphdbSync'
 import { ElMessage, ElMessageBox } from 'element-plus'
 
 const loading = ref(false)
 const instances = ref<GraphDBInstance[]>([])
+const allVersions = ref<SyncVersion[]>([])
 const healthMap = ref<Record<string, InstanceHealth>>({})
 const healthChecking = ref<string | null>(null)
 
@@ -116,12 +139,18 @@ const form = ref<InstanceCreateForm>({
   repo_id: '',
   namespace_prefix: 'loanfibo',
   domain: '',
+  version_id: '',
 })
 
 async function loadInstances() {
   loading.value = true
   try {
-    instances.value = await graphdbSyncApi.listInstances()
+    const [insts, vers] = await Promise.all([
+      graphdbSyncApi.listInstances(),
+      graphdbSyncApi.listVersions(),
+    ])
+    instances.value = insts
+    allVersions.value = vers
   } catch {
     ElMessage.error('加载实例列表失败')
   } finally {
@@ -148,7 +177,7 @@ async function checkHealth(id: string) {
 
 function openCreateDialog() {
   editingId.value = null
-  form.value = { name: '', server_url: '', repo_id: '', namespace_prefix: 'loanfibo', domain: '' }
+  form.value = { name: '', server_url: '', repo_id: '', namespace_prefix: 'loanfibo', domain: '', version_id: '' }
   showDialog.value = true
 }
 
@@ -160,6 +189,7 @@ function openEditDialog(inst: GraphDBInstance) {
     repo_id: inst.repo_id,
     namespace_prefix: inst.namespace_prefix,
     domain: inst.domain || '',
+    version_id: inst.version_id || '',
   }
   showDialog.value = true
 }
@@ -208,7 +238,35 @@ async function handleDelete(inst: GraphDBInstance) {
   }
 }
 
+const publishedVersions = computed(() =>
+  allVersions.value.filter(v => v.status === 'published' || v.status === 'synced'),
+)
+
 onMounted(loadInstances)
+
+function getVersionTag(versionId: string | null): string {
+  if (!versionId) return '-'
+  const v = allVersions.value.find(ver => ver.id === versionId)
+  return v ? v.version_tag : versionId
+}
+
+function getVersionStatus(versionId: string | null): string | null {
+  if (!versionId) return null
+  const v = allVersions.value.find(ver => ver.id === versionId)
+  return v ? v.status : null
+}
+
+function statusTagType(s: string): string {
+  if (s === 'synced') return 'success'
+  if (s === 'published') return ''
+  if (s === 'draft') return 'warning'
+  return 'info'
+}
+
+function statusLabel(s: string): string {
+  const map: Record<string, string> = { draft: '草稿', published: '已发布', synced: '已同步', failed: '失败' }
+  return map[s] || s
+}
 </script>
 
 <style scoped>

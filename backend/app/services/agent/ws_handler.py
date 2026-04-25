@@ -347,38 +347,71 @@ class AgentWSHandler:
     ) -> None:
         """对 query_indicator 结果执行历史双写。
 
-        期望 Agent 返回的 data 格式：
-        {
-            "action": "query_indicator",
-            "company_id": "uuid",
-            "calc_date": "2026-04-20",
-            "values": [
-                {"indicator_id": "uuid", "value": 123.45, "value_prev": 100.0, "data_quality": "P0"},
-                ...
-            ]
-        }
+        支持两种 data 格式：
+        1. 结构化格式（Agent 主动封装）：
+           {"action": "query_indicator", "company_id": "uuid", "calc_date": "...", "values": [...]}
+        2. ERP 原始 SQL 结果：
+           {"rows": [{"COL_NAME": "value"}], "status": "ok", ...}
+           此时从 IndicatorCollectionPipeline._msg_context_map 回查采集上下文。
         """
-        if data.get("action") != "query_indicator":
-            return
+        # 方式1：结构化格式
+        if data.get("action") == "query_indicator":
+            values = data.get("values", [])
+            if not values:
+                return
+            company_id = data.get("company_id")
+            calc_date_str = data.get("calc_date")
+            if not company_id or not calc_date_str:
+                logger.warning("query_indicator result 缺少 company_id 或 calc_date: msg_id=%s", msg_id)
+                return
+            try:
+                from datetime import date as date_type
+                calc_date = date_type.fromisoformat(calc_date_str)
+            except (ValueError, TypeError):
+                logger.warning("query_indicator result calc_date 格式错误: %s", calc_date_str)
+                return
+            source = "agent_structured"
+        else:
+            # 方式2：ERP 原始结果 → 从上下文映射回查
+            rows = data.get("rows", [])
+            if not rows or data.get("status") != "ok":
+                return
 
-        values = data.get("values", [])
-        if not values:
-            return
+            from backend.app.services.indicator_collection import IndicatorCollectionPipeline
+            ctx = IndicatorCollectionPipeline.pop_context(msg_id)
+            if not ctx:
+                return
 
-        company_id = data.get("company_id")
-        calc_date_str = data.get("calc_date")
+            company_id = ctx.get("company_id")
+            calc_date_str = ctx.get("calc_date")
+            if not company_id or not calc_date_str:
+                return
 
-        if not company_id or not calc_date_str:
-            logger.warning("query_indicator result 缺少 company_id 或 calc_date: msg_id=%s", msg_id)
-            return
+            # 将 ERP 组织编码转换为 fi_applicant_org 的 UUID
+            company_uuid = await self._resolve_company_uuid(company_id)
+            if not company_uuid:
+                from loguru import logger as loguru_logger
+                loguru_logger.warning("[双写] 未找到企业UUID: org_id={}", company_id)
+                return
+            company_id = company_uuid
 
-        try:
-            from datetime import date as date_type
-            calc_date = date_type.fromisoformat(calc_date_str)
-        except (ValueError, TypeError):
-            logger.warning("query_indicator result calc_date 格式错误: %s", calc_date_str)
-            return
+            try:
+                from datetime import date as date_type
+                calc_date = date_type.fromisoformat(calc_date_str)
+            except (ValueError, TypeError):
+                return
 
+            # 从 rows 中提取指标值：row 里的每一列对应一个指标
+            # 用 notation 匹配 fi_indicator 表中的指标
+            row = rows[0] if rows else {}
+            values = await self._convert_rows_to_indicator_values(
+                row, ctx, company_id
+            )
+            if not values:
+                return
+            source = "agent_raw_sql"
+
+        # 执行双写
         try:
             from backend.app.database import async_session_factory
             from backend.app.services.indicator_history import IndicatorHistoryWriter
@@ -389,7 +422,7 @@ class AgentWSHandler:
                     company_id=company_id,
                     calc_date=calc_date,
                     values=values,
-                    source="agent",
+                    source=source,
                 )
                 await db.commit()
                 logger.info(
@@ -398,6 +431,157 @@ class AgentWSHandler:
                 )
         except Exception as e:
             logger.error("指标历史双写失败: org=%s msg_id=%s err=%s", org_id, msg_id, e)
+
+    async def _resolve_company_uuid(self, org_id: str) -> str | None:
+        """将 ERP 组织编码或 UUID 转换为 fi_applicant_org 的 UUID。
+
+        优先匹配: unified_code → name → 直接作为 UUID
+        """
+        # 如果已经是 UUID 格式
+        try:
+            from uuid import UUID
+            UUID(org_id)
+            return org_id
+        except ValueError:
+            pass
+
+        from backend.app.database import async_session_factory
+        from sqlalchemy import select
+        from backend.app.models.fi_applicant_org import FiApplicantOrg
+
+        async with async_session_factory() as db:
+            # 按 unified_code 查找
+            stmt = select(FiApplicantOrg).where(FiApplicantOrg.unified_code == org_id).limit(1)
+            result = await db.execute(stmt)
+            org = result.scalar_one_or_none()
+            if org:
+                return str(org.id)
+
+            # 按 name 查找
+            stmt2 = select(FiApplicantOrg).where(FiApplicantOrg.name == org_id).limit(1)
+            result2 = await db.execute(stmt2)
+            org2 = result2.scalar_one_or_none()
+            if org2:
+                return str(org2.id)
+
+        return None
+
+    async def _convert_rows_to_indicator_values(
+        self, row: dict, ctx: dict, company_id: str
+    ) -> list[dict]:
+        """将 ERP 返回的单行 SQL 结果转换为 fi_indicator_value 格式。
+
+        匹配策略（优先级）：
+        1. notation → code（SCF-LOAN-01 → SCF_LOAN_01）
+        2. indicator_label → name（中文名称模糊匹配）
+
+        返回: [{"indicator_id": "uuid", "value": 0.0, "data_quality": "P0"}, ...]
+        """
+        from backend.app.database import async_session_factory
+        from sqlalchemy import select, or_
+        from backend.app.models.fi_indicator import FiIndicator
+        from loguru import logger as loguru_logger
+
+        values = []
+        notation = ctx.get("notation", "")
+        indicator_label = ctx.get("indicator_label", "")
+
+        # 从 row 中取第一个数值列的值
+        numeric_value = None
+        for col_name, col_value in row.items():
+            try:
+                numeric_value = float(col_value) if col_value is not None else None
+                break
+            except (ValueError, TypeError):
+                continue
+
+        async with async_session_factory() as db:
+            indicator = None
+
+            # 策略1: notation → code
+            if notation:
+                indicator_code = notation.replace("-", "_")
+                stmt = select(FiIndicator).where(FiIndicator.code == indicator_code).limit(1)
+                result = await db.execute(stmt)
+                indicator = result.scalar_one_or_none()
+                if indicator:
+                    loguru_logger.info("[双写] matched by code: notation={} → code={}", notation, indicator_code)
+
+            # 策略2: indicator_label → name 模糊匹配
+            if not indicator and indicator_label:
+                # 去掉中括号标记（如"【交易规模】月均销售额" → "月均销售额"）
+                clean_label = indicator_label
+                bracket_pairs = [("【", "】"), ("〔", "〕"), ("[", "]")]
+                for open_b, close_b in bracket_pairs:
+                    if open_b in clean_label:
+                        idx = clean_label.find(open_b)
+                        end_idx = clean_label.find(close_b, idx)
+                        if end_idx >= 0:
+                            clean_label = clean_label[end_idx+1:].strip()
+                        break
+
+                if clean_label:
+                    stmt2 = select(FiIndicator).where(FiIndicator.name.ilike(f"%{clean_label}%")).limit(1)
+                    result2 = await db.execute(stmt2)
+                    indicator = result2.scalar_one_or_none()
+                    if indicator:
+                        loguru_logger.info("[双写] matched by name: label={} → name={}", indicator_label, indicator.name)
+
+            if indicator:
+                values.append({
+                    "indicator_id": str(indicator.id),
+                    "value": numeric_value,
+                    "data_quality": "P0",
+                })
+            else:
+                # 策略3: 自动创建 fi_indicator 记录（确保数据不丢）
+                indicator_code = notation.replace("-", "_") if notation else f"AUTO_{msg_id[:8]}"
+                indicator_name = indicator_label or indicator_code
+                # 推断 scenario
+                scenario = "pre_loan"
+                if notation:
+                    if notation.startswith("SCF-"):
+                        scenario = "scf"
+                    elif notation.startswith("POST-"):
+                        scenario = "post_loan"
+                # 清理名称中的中括号
+                clean_name = indicator_name
+                bracket_pairs = [("\u3010", "\u3011"), ("\u3014", "\u3015"), ("[", "]")]
+                for open_b, close_b in bracket_pairs:
+                    if open_b in clean_name:
+                        idx = clean_name.find(open_b)
+                        end_idx = clean_name.find(close_b, idx)
+                        if end_idx >= 0:
+                            clean_name = clean_name[end_idx+1:].strip()
+                        break
+
+                try:
+                    new_indicator = FiIndicator(
+                        code=indicator_code,
+                        name=clean_name or indicator_code,
+                        scenario=scenario,
+                        threshold_direction="above",
+                    )
+                    db.add(new_indicator)
+                    await db.commit()
+                    await db.refresh(new_indicator)
+                    values.append({
+                        "indicator_id": str(new_indicator.id),
+                        "value": numeric_value,
+                        "data_quality": "P0",
+                    })
+                    loguru_logger.info(
+                        "[双写] auto-created indicator: code={} name={} scenario={} value={}",
+                        indicator_code, clean_name, scenario, numeric_value,
+                    )
+                except Exception as e:
+                    await db.rollback()
+                    loguru_logger.warning("[双写] auto-create indicator failed: code={} err={}", indicator_code, e)
+                    loguru_logger.debug("[双写] 未匹配: notation={} label={} row_keys={}", notation, indicator_label, list(row.keys()))
+
+        loguru_logger.info("[双写] _convert_rows: matched={}/1 notation={} label={}",
+                          len(values), notation, indicator_label)
+        return values
 
 
 # 全局单例

@@ -37,6 +37,9 @@ class IndicatorCollectionPipeline:
     ApplicantOrg → linkedToInstance → ERPInstance → CalculationRule → hasSQL → ERP代理
     """
 
+    # 类级别 msg_id→context 映射，供 ws_handler 回查采集上下文
+    _msg_context_map: dict[str, dict] = {}
+
     def __init__(
         self,
         router: AgentRouter | None = None,
@@ -47,7 +50,19 @@ class IndicatorCollectionPipeline:
         self._router = router or get_router()
         self._task_queue = task_queue or get_task_queue()
         self._tracer = tracer or get_tracer()
-        self._graphdb = graphdb_client or GraphDBClient()
+        if graphdb_client is None:
+            from backend.app.config import settings
+            self._graphdb = GraphDBClient(
+                endpoint=settings.GRAPHDB_ENDPOINT,
+                repo=settings.GRAPHDB_REPO,
+            )
+        else:
+            self._graphdb = graphdb_client
+
+    @classmethod
+    def pop_context(cls, msg_id: str) -> dict | None:
+        """取出 msg_id 对应的采集上下文（取出后删除）。"""
+        return cls._msg_context_map.pop(msg_id, None)
 
     async def _fetch_orgs_from_graphdb(self) -> list[dict]:
         """从 GraphDB SPARQL 查询融资企业清单。
@@ -177,9 +192,9 @@ class IndicatorCollectionPipeline:
             org_conns = self._router.get_all_for_org(org_id)
             online_conns = [c for c in org_conns if c.status == AgentStatus.ONLINE]
 
-            # 也尝试通过 datasource 匹配
+            # 也尝试通过 datasource 匹配（当 org_id 不匹配时，从所有连接中找对应数据源的在线代理）
             if not online_conns:
-                all_conns = self._router.get_all_for_org("*")
+                all_conns = self._router.get_all_connections()
                 online_conns = [c for c in all_conns
                                 if c.datasource == erp_datasource and c.status == AgentStatus.ONLINE]
 
@@ -222,6 +237,19 @@ class IndicatorCollectionPipeline:
                     status = result.get("status")
                     if status == TaskStatus.DISPATCHED.value:
                         dispatched += 1
+                        # 保存采集上下文，供 result 回来时双写
+                        msg_id = result.get("msg_id")
+                        if msg_id:
+                            self._msg_context_map[msg_id] = {
+                                "org_id": org_id,  # ERP组织编码
+                                "company_id": org_id,  # 需要在双写时转换为UUID
+                                "calc_date": today,
+                                "indicator_uri": rule_info.get("indicator_uri", ""),
+                                "indicator_label": rule_info.get("indicator_label", ""),
+                                "rule_label": rule_info.get("rule_label", ""),
+                                "notation": rule_info.get("notation", ""),
+                                "scenario_id": rule_info.get("scenario_id", ""),
+                            }
                         self._tracer.add_span(
                             batch_trace,
                             "collection_scheduler",

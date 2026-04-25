@@ -472,8 +472,9 @@ async def revoke_credential(
 @router.get("/status")
 async def get_agent_status(
     org_id: Optional[str] = Query(None),
+    db: AsyncSession = Depends(get_db),
 ):
-    """查询代理连接状态 — ONLINE/DEGRADED/OFFLINE。"""
+    """查询代理连接状态 — 含建链时间、通讯统计、成功率。"""
     agent_router = get_router()
 
     if org_id:
@@ -483,6 +484,38 @@ async def get_agent_status(
 
     status_list = []
     for conn in conns:
+        # 从 agent_trace 表查询历史统计
+        total_count = 0
+        success_count = 0
+        fail_count = 0
+        try:
+            from sqlalchemy import text as sql_text
+            # 统计该企业的所有通讯记录
+            stats_result = await db.execute(
+                sql_text("""
+                    SELECT
+                        COUNT(*) as total,
+                        COUNT(*) FILTER (WHERE status = 'COMPLETED') as success,
+                        COUNT(*) FILTER (WHERE status IN ('ERROR', 'AGENT_UNREACHABLE', 'TASK_TIMEOUT')) as fail
+                    FROM agent_trace
+                    WHERE org_id = CAST(:org_id AS uuid) AND datasource = :datasource
+                """),
+                {"org_id": conn.org_id, "datasource": conn.datasource},
+            )
+            stats_row = stats_result.fetchone()
+            if stats_row:
+                total_count = stats_row[0] or 0
+                success_count = stats_row[1] or 0
+                fail_count = stats_row[2] or 0
+        except Exception as e:
+            logger.warning("查询通讯统计失败: %s", e)
+
+        # 合并内存统计（当前连接周期）和历史统计
+        combined_total = conn.total_tasks + total_count
+        combined_success = conn.success_tasks + success_count
+        combined_fail = conn.fail_tasks + fail_count
+        success_rate = round(combined_success / combined_total * 100, 1) if combined_total > 0 else 0.0
+
         status_list.append({
             "org_id": conn.org_id,
             "datasource": conn.datasource,
@@ -490,6 +523,11 @@ async def get_agent_status(
             "version": conn.version,
             "ip": conn.ip,
             "last_seen": conn.last_seen.isoformat(),
+            "connected_at": conn.connected_at.isoformat(),
+            "total_tasks": combined_total,
+            "success_tasks": combined_success,
+            "fail_tasks": combined_fail,
+            "success_rate": success_rate,
         })
 
     return {"code": 0, "data": status_list}
@@ -645,21 +683,54 @@ async def list_versions(
 @router.get("/traces")
 async def list_traces(
     org_id: Optional[str] = Query(None),
+    status: Optional[str] = Query(None),
     limit: int = Query(20, le=100),
     offset: int = Query(0),
     db: AsyncSession = Depends(get_db),
 ):
-    """查询追踪列表。"""
+    """查询追踪列表（含统计总数）。"""
     stmt = select(AgentTrace).order_by(AgentTrace.created_at.desc())
+    count_stmt = select(func.count()).select_from(AgentTrace)
     if org_id:
         stmt = stmt.where(AgentTrace.org_id == org_id)
-    stmt = stmt.offset(offset).limit(limit)
+        count_stmt = count_stmt.where(AgentTrace.org_id == org_id)
+    if status:
+        stmt = stmt.where(AgentTrace.status == status)
+        count_stmt = count_stmt.where(AgentTrace.status == status)
 
+    total = (await db.execute(count_stmt)).scalar() or 0
+
+    stmt = stmt.offset(offset).limit(limit)
     result = await db.execute(stmt)
     traces = list(result.scalars().all())
 
-    data = [
-        {
+    data = []
+    for t in traces:
+        # 提取请求/返回报文概要
+        spans = t.spans if isinstance(t.spans, list) else []
+        request_summary = None
+        response_summary = None
+        for span in spans:
+            detail = span.get("detail", {}) if isinstance(span, dict) else {}
+            if span.get("event") == "task_dispatched" and detail.get("request"):
+                req = detail["request"]
+                payload = req.get("payload", {})
+                request_summary = {
+                    "action": payload.get("action", t.action),
+                    "sql_hint": payload.get("sql", "")[:200] if payload.get("sql") else "",
+                }
+            if span.get("event") == "result_received" and detail.get("response"):
+                resp = detail["response"]
+                response_summary = {
+                    "data_keys": list(resp.keys()) if isinstance(resp, dict) else [],
+                    "row_count": resp.get("row_count", resp.get("values", [])) if isinstance(resp, dict) else None,
+                }
+            if span.get("event") == "error_received":
+                response_summary = {
+                    "error": detail.get("error", "unknown"),
+                }
+
+        data.append({
             "trace_id": t.trace_id,
             "org_id": str(t.org_id),
             "datasource": t.datasource,
@@ -667,11 +738,11 @@ async def list_traces(
             "status": t.status,
             "duration_ms": t.duration_ms,
             "created_at": t.created_at.isoformat(),
-        }
-        for t in traces
-    ]
+            "request_summary": request_summary,
+            "response_summary": response_summary,
+        })
 
-    return {"code": 0, "data": data}
+    return {"code": 0, "data": data, "total": total}
 
 
 @router.get("/traces/{trace_id}")
@@ -729,7 +800,7 @@ async def submit_task(
 # ---------------------------------------------------------------------------
 
 class CollectRequest(BaseModel):
-    org_id: str
+    org_id: str = ""
     datasource: str = "NCC"
 
 
@@ -747,5 +818,6 @@ async def trigger_collection(
     else:
         result = await pipeline.collect_all()
 
+    # 采集完成后立即刷新 trace
     return {"code": 0, "data": result}
 
